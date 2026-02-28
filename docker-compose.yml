@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: geopol-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your-postgres-password
+      POSTGRES_DB: geopolitical_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: geopol-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: geopol-neo4j
+    restart: always
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/your-neo4j-password
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+  backend:
+    build:
+      context: ./backend
+    container_name: geopol-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_SERVER=db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your-postgres-password
+      - POSTGRES_DB=geopolitical_intel
+      - REDIS_HOST=redis
+      - NEO4J_URI=bolt://neo4j:7687
+    depends_on:
+      - db
+      - redis
+      - neo4j
+    env_file:
+      - ./backend/.env
+
+  frontend:
+    build:
+      context: ./Frontend
+    container_name: geopol-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
