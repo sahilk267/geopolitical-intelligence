@@ -1,4 +1,8 @@
-# React + TypeScript + Vite
+# geopolitical-intelligence
+
+This project is a Geopolitical Intelligence Agent built with React, TypeScript, and Vite.
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
