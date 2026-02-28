@@ -1,0 +1,378 @@
+/* ============================================
+   STRATEGIC CONTEXT - GEOPOLITICAL INTELLIGENCE PLATFORM
+   Custom Styles
+   ============================================ */
+
+/* Global Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0f1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Selection */
+::selection {
+  background: rgba(199, 168, 74, 0.3);
+  color: white;
+}
+
+/* Progress Bar Customization */
+[data-slot="progress-indicator"] {
+  background: linear-gradient(90deg, #C7A84A, #d4b65c);
+}
+
+/* Slider Customization */
+[data-slot="slider-track"] {
+  background: #1e293b;
+}
+
+[data-slot="slider-range"] {
+  background: #C7A84A;
+}
+
+[data-slot="slider-thumb"] {
+  background: #C7A84A;
+  border-color: #C7A84A;
+}
+
+/* Switch Customization */
+[data-state="checked"] {
+  background-color: #C7A84A !important;
+}
+
+/* Card Hover Effects */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Line Clamp Utilities */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Animation Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Animation Classes */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Risk Score Colors */
+.risk-low {
+  color: #22c55e;
+}
+
+.risk-moderate {
+  color: #84cc16;
+}
+
+.risk-elevated {
+  color: #eab308;
+}
+
+.risk-high {
+  color: #f97316;
+}
+
+.risk-critical {
+  color: #ef4444;
+}
+
+/* ERI Colors */
+.eri-low {
+  color: #22c55e;
+}
+
+.eri-moderate {
+  color: #84cc16;
+}
+
+.eri-elevated {
+  color: #eab308;
+}
+
+.eri-high {
+  color: #f97316;
+}
+
+.eri-critical {
+  color: #ef4444;
+}
+
+/* Custom Input Range */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #C7A84A;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 10px rgba(199, 168, 74, 0.5);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #C7A84A;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Focus Styles */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #C7A84A !important;
+  box-shadow: 0 0 0 2px rgba(199, 168, 74, 0.2);
+}
+
+/* Button Transitions */
+button {
+  transition: all 0.2s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* Badge Styles */
+.badge-tier-1 {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.badge-tier-2 {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.badge-tier-3 {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.badge-tier-4 {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Priority Colors */
+.priority-normal {
+  background: #64748b;
+}
+
+.priority-important {
+  background: #3b82f6;
+}
+
+.priority-breaking {
+  background: #f59e0b;
+}
+
+.priority-emergency {
+  background: #ef4444;
+}
+
+/* Stage Colors */
+.stage-ingestion {
+  background: #64748b;
+}
+
+.stage-screening {
+  background: #3b82f6;
+}
+
+.stage-research {
+  background: #6366f1;
+}
+
+.stage-risk {
+  background: #f59e0b;
+}
+
+.stage-script {
+  background: #a855f7;
+}
+
+.stage-review {
+  background: #ec4899;
+}
+
+.stage-approval {
+  background: #f97316;
+}
+
+.stage-published {
+  background: #22c55e;
+}
+
+/* Tooltip Customization */
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* Grid Pattern Background */
+.bg-grid-pattern {
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Glass Effect */
+.glass {
+  background: rgba(11, 31, 58, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Gradient Text */
+.gradient-text {
+  background: linear-gradient(135deg, #C7A84A, #5A6A7A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Status Indicators */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.status-dot.away {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.status-dot.offline {
+  background: #64748b;
+}
+
+/* Loading Spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #1e293b;
+  border-top-color: #C7A84A;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+    color: black;
+  }
+}
