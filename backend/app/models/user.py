@@ -22,6 +22,16 @@ class UserRole(str, PyEnum):
     VIEWER = "viewer"
 
 
+class UserRoleLink(Base):
+    """User-Role association table."""
+    __tablename__ = "user_roles"
+    
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), primary_key=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+
 class Role(Base):
     """Role definition model."""
     __tablename__ = "roles"
@@ -34,18 +44,7 @@ class Role(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    users = relationship("User", secondary=UserRoleLink.__table__, back_populates="roles", foreign_keys=[UserRoleLink.user_id, UserRoleLink.role_id])
-
-
-class UserRoleLink(Base):
-
-    """User-Role association table."""
-    __tablename__ = "user_roles"
-    
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
-    role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), primary_key=True)
-    assigned_at = Column(DateTime, default=datetime.utcnow)
-    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    users = relationship("User", secondary="user_roles", back_populates="roles", foreign_keys=[UserRoleLink.user_id, UserRoleLink.role_id])
 
 
 class User(Base):
