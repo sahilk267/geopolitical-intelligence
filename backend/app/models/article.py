@@ -92,7 +92,6 @@ class NormalizedArticle(Base):
     priority = Column(Integer, default=0)  # 0=normal, 1=important, 2=breaking, 3=emergency
     
     # Risk assessment
-    risk_score_id = Column(UUID(as_uuid=True), ForeignKey("risk_scores.id"))
     
     # Editorial workflow
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -108,7 +107,7 @@ class NormalizedArticle(Base):
     raw_article = relationship("RawArticle", back_populates="normalized_article")
     entities = relationship("Entity", secondary="article_entities", back_populates="articles")
     claims = relationship("Claim", back_populates="article")
-    risk_score = relationship("RiskScore", uselist=False, foreign_keys="[NormalizedArticle.risk_score_id]", back_populates="article")
+    risk_score = relationship("RiskScore", back_populates="article", uselist=False)
     
     def to_dict(self) -> dict:
         return {
