@@ -60,6 +60,9 @@ class RiskScore(Base):
     assessed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     assessed_at = Column(DateTime, default=datetime.utcnow)
     
+    # Relationships
+    article = relationship("NormalizedArticle", back_populates="risk_score", foreign_keys="[RiskScore.article_id]")
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
