@@ -48,14 +48,10 @@ async def create_initial_data(db: AsyncSession):
     await db.commit()
     logger.info("Default roles created")
     
-    # Create default admin user
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    
     admin_user = User(
         email="admin@geopolintel.com",
         username="admin",
-        hashed_password=pwd_context.hash("admin123"),  # Change in production!
+        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGGa31yy",  # admin123
         full_name="System Administrator",
         primary_role=UserRole.ADMIN,
         is_superuser=True,
