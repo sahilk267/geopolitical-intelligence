@@ -76,7 +76,7 @@ class User(Base):
     # Relationships
     roles = relationship("Role", secondary=UserRoleLink.__table__, back_populates="users", foreign_keys=[UserRoleLink.role_id, UserRoleLink.user_id])
     audit_logs = relationship("AuditLog", back_populates="user")
-    scripts = relationship("Script", back_populates="created_by_user")
+    scripts = relationship("Script", back_populates="created_by_user", foreign_keys="[Script.created_by]")
     
     def has_role(self, role: UserRole) -> bool:
         """Check if user has specific role."""
