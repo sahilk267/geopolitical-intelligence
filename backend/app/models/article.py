@@ -108,7 +108,7 @@ class NormalizedArticle(Base):
     raw_article = relationship("RawArticle", back_populates="normalized_article")
     entities = relationship("Entity", secondary="article_entities", back_populates="articles")
     claims = relationship("Claim", back_populates="article")
-    risk_score = relationship("RiskScore", uselist=False)
+    risk_score = relationship("RiskScore", uselist=False, foreign_keys=[risk_score_id])
     
     def to_dict(self) -> dict:
         return {
