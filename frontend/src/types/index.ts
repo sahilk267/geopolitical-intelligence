@@ -47,7 +47,7 @@ export interface RiskAssessment {
 // EDITORIAL WORKFLOW TYPES
 // --------------------------------------------
 
-export type WorkflowStage = 
+export type WorkflowStage =
   | 'ingestion'
   | 'preliminary_screening'
   | 'research_layering'
@@ -59,7 +59,7 @@ export type WorkflowStage =
   | 'post_publish_monitoring'
   | 'correction';
 
-export type ContentLayer = 
+export type ContentLayer =
   | 'factual_reporting'
   | 'historical_context'
   | 'analytical_assessment'
@@ -275,7 +275,7 @@ export interface User {
   createdAt: string;
 }
 
-export type Permission = 
+export type Permission =
   | 'view_content'
   | 'create_content'
   | 'edit_content'
@@ -396,4 +396,65 @@ export interface FetchTestResult {
   itemsFound: number;
   errorMessage?: string;
   sampleData?: unknown;
+}
+
+// --------------------------------------------
+// VIDEO PRODUCTION TYPES
+// --------------------------------------------
+// AUTOMATION TYPES
+// --------------------------------------------
+
+export type AutomationTaskType = 'content_fetch' | 'video_generation' | 'report_generation' | 'system_maintenance';
+
+export interface AutomationSchedule {
+  id: string;
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  cronExpression?: string;
+  intervalMinutes?: number;
+  taskType: AutomationTaskType;
+  taskParams: Record<string, any>;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  runCount: number;
+  successCount: number;
+  failureCount: number;
+  createdAt: string;
+}
+
+export type VideoJobStatus =
+  | 'queued'
+  | 'processing'
+  | 'tts_generating'
+  | 'avatar_rendering'
+  | 'video_compositing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface VideoJob {
+  id: string;
+  scriptId: string;
+  status: VideoJobStatus;
+  priority: number;
+  resolution: string;
+  progress: number;
+  currentStage?: string;
+  stageProgress: Record<string, number>;
+  errorMessage?: string;
+  outputUrl?: string;
+  thumbnailUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  createdBy: string;
+}
+
+export interface VideoPipelineStatus {
+  totalJobs: number;
+  queued: number;
+  processing: number;
+  completed: number;
+  failed: number;
 }

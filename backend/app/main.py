@@ -2,6 +2,7 @@
 Geopolitical Intelligence Platform - FastAPI Application
 """
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -26,6 +27,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up Geopolitical Intelligence Platform...")
     await init_db()
     logger.info("Database initialized")
+    
+    # Start background scheduler
+    from app.core.scheduler import poll_sources_task
+    asyncio.create_task(poll_sources_task())
+    logger.info("Background scheduler started")
+    
     yield
     # Shutdown
     logger.info("Shutting down...")
@@ -101,6 +108,7 @@ from app.api.v1.endpoints import (
     briefs,
     audit,
     dashboard,
+    automation,
 )
 
 # Include API routers
@@ -118,6 +126,7 @@ app.include_router(videos.router, prefix="/api/v1/videos", tags=["Video Producti
 app.include_router(briefs.router, prefix="/api/v1/briefs", tags=["Weekly Briefs"])
 app.include_router(audit.router, prefix="/api/v1/audit", tags=["Audit Logs"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(automation.router, prefix="/api/v1/automation", tags=["Automation"])
 
 
 if __name__ == "__main__":

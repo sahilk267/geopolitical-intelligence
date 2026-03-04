@@ -12,8 +12,51 @@ from app.db.base import get_db
 from app.models.article import NormalizedArticle, ArticleStatus
 from app.models.user import User, UserRole
 from app.api.v1.endpoints.auth import get_current_active_user, require_role
+from pydantic import BaseModel
+
+class GenerateFromUrlRequest(BaseModel):
+    url: str
+    topic: Optional[str] = None
+    region: Optional[str] = None
+
+class ArticleCreate(BaseModel):
+    headline: str
+    content: str
+    summary: Optional[str] = None
+    category: Optional[str] = None
+    region: Optional[str] = None
+    topics: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    priority: Optional[int] = 0
 
 router = APIRouter()
+
+
+@router.post("/", response_model=dict)
+async def create_article(
+    article_in: ArticleCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.JUNIOR_EDITOR))
+):
+    """Create a new normalized article manually."""
+    db_article = NormalizedArticle(
+        headline=article_in.headline,
+        content=article_in.content,
+        summary=article_in.summary or article_in.content[:200] + "...",
+        category=article_in.category or "General",
+        region=article_in.region or "Global",
+        topics=article_in.topics or [],
+        tags=article_in.tags or [],
+        priority=article_in.priority or 0,
+        status=ArticleStatus.DRAFT,
+        created_by=current_user.id
+    )
+    
+    db.add(db_article)
+    await db.commit()
+    await db.refresh(db_article)
+    
+    return db_article.to_dict()
 
 
 @router.get("/")
@@ -122,6 +165,20 @@ async def update_article_priority(
     await db.commit()
     
     return article.to_dict()
+
+
+@router.delete("/cleanup/all")
+async def cleanup_articles(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.ADMIN))
+):
+    """Delete all normalized articles (Admin only)."""
+    from sqlalchemy import delete
+    
+    await db.execute(delete(NormalizedArticle))
+    await db.commit()
+    
+    return {"message": "All normalized articles cleared"}
 @router.post("/process/{raw_article_id}")
 async def process_raw_article(
     raw_article_id: UUID,
@@ -157,3 +214,31 @@ async def process_raw_article(
     await db.refresh(normalized)
     
     return normalized.to_dict()
+
+
+@router.post("/generate-from-url")
+async def generate_from_url(
+    request: GenerateFromUrlRequest,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Fetch content from URL and generate initial draft using AI."""
+    from app.services.ai_service import ai_service
+    
+    # Scrape content
+    scraped = await ai_service.get_content_from_url(request.url)
+    if "error" in scraped:
+        raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {scraped['error']}")
+        
+    headline = scraped["headline"]
+    content = scraped["content"]
+    
+    # Summarize
+    summary = await ai_service.summarize_article(headline, content)
+    
+    return {
+        "headline": headline,
+        "content": content,
+        "summary": summary,
+        "topic": request.topic or "Strategic Analysis",
+        "region": request.region or "Global"
+    }

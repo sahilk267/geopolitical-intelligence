@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Video,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -29,7 +30,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'content', label: 'Content Workflow', icon: FileText, badge: 3 },
+  { id: 'content', label: 'Content Workflow', icon: FileText },
+  { id: 'video', label: 'Video Production', icon: Video },
   { id: 'risk', label: 'Risk Analysis', icon: ShieldAlert },
   { id: 'eri', label: 'ERI Dashboard', icon: TrendingUp },
   { id: 'briefs', label: 'Weekly Briefs', icon: Newspaper },
@@ -113,9 +115,9 @@ export function Sidebar() {
               {sidebarOpen && (
                 <>
                   <span className="flex-1 text-left text-sm">{item.label}</span>
-                  {item.badge && (
+                  {item.id === 'content' && useAppStore.getState().getPendingApprovals().length > 0 && (
                     <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full">
-                      {item.badge}
+                      {useAppStore.getState().getPendingApprovals().length}
                     </span>
                   )}
                 </>

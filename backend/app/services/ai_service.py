@@ -2,6 +2,9 @@ import google.generativeai as genai
 from typing import List, Optional, Dict, Any
 from app.core.config import settings
 import structlog
+import httpx
+from bs4 import BeautifulSoup
+import re
 
 logger = structlog.get_logger()
 
@@ -13,6 +16,47 @@ class AIService:
         else:
             self.model = None
             logger.warning("GEMINI_API_KEY not set. AI features will be disabled.")
+
+    async def get_content_from_url(self, url: str) -> Dict[str, str]:
+        """Scrape content from a given URL."""
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Try to get the main content
+                # Common news site selectors
+                headline = ""
+                title_tag = soup.find('h1') or soup.find('title')
+                if title_tag:
+                    headline = title_tag.get_text().strip()
+                
+                # Remove script and style elements
+                for script in soup(["script", "style"]):
+                    script.decompose()
+                
+                # Get text
+                text = soup.get_text()
+                
+                # Break into lines and remove leading and trailing whitespace
+                lines = (line.strip() for line in text.splitlines())
+                # Break multi-headlines into a line each
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                # Drop blank lines
+                text = '\n'.join(chunk for chunk in chunks if chunk)
+                
+                # Limit text size for Gemini
+                clean_text = text[:10000] 
+                
+                return {
+                    "headline": headline,
+                    "content": clean_text
+                }
+        except Exception as e:
+            logger.error("Scraping error", url=url, error=str(e))
+            return {"error": str(e)}
 
     async def summarize_article(self, headline: str, content: str) -> str:
         """Summarize article content using Gemini."""

@@ -12,11 +12,12 @@ import {
   User,
   Shield,
   AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 import { getRiskColor, classifyRisk } from '@/lib/riskEngine';
 
 export function Header() {
-  const { currentERI, safeModeEnabled, getDashboardStats } = useAppStore();
+  const { currentERI, safeModeEnabled, getDashboardStats, currentUser } = useAppStore();
   const stats = getDashboardStats();
 
   return (
@@ -86,8 +87,8 @@ export function Header() {
 
         <div className="flex items-center gap-3 pl-3 border-l border-slate-700">
           <div className="text-right">
-            <p className="text-sm font-medium text-white">Editor-in-Chief</p>
-            <p className="text-xs text-slate-400">Admin</p>
+            <p className="text-sm font-medium text-white">{currentUser?.name || 'Administrator'}</p>
+            <p className="text-xs text-slate-400">{currentUser?.role || 'System Admin'}</p>
           </div>
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#5A6A7A] to-[#0B1F3A] flex items-center justify-center border border-slate-600">
             <User className="w-4 h-4 text-slate-300" />
@@ -98,5 +99,3 @@ export function Header() {
   );
 }
 
-// Need to import this for the header
-import { TrendingUp } from 'lucide-react';

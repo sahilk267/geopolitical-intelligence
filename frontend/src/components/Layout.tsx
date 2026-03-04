@@ -3,6 +3,7 @@
 // Dashboard Shell with Sidebar Navigation
 // ============================================
 
+import { useEffect } from 'react';
 import { useAppStore } from '@/store';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -13,11 +14,17 @@ import { ERIDashboard } from '@/sections/ERIDashboard';
 import { WeeklyBriefSection } from '@/sections/WeeklyBrief';
 import { EvidenceArchive } from '@/sections/EvidenceArchive';
 import { AudienceIntelligence } from '@/sections/AudienceIntelligence';
+import { VideoProduction } from '@/sections/VideoProduction';
 import { SystemMonitor } from '@/sections/SystemMonitor';
 import { Settings } from '@/sections/Settings';
+import { NewContentDialog } from './NewContentDialog';
 
 export function Layout() {
-  const { activeTab, sidebarOpen } = useAppStore();
+  const { activeTab, sidebarOpen, fetchAllData } = useAppStore();
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -35,6 +42,8 @@ export function Layout() {
         return <EvidenceArchive />;
       case 'audience':
         return <AudienceIntelligence />;
+      case 'video':
+        return <VideoProduction />;
       case 'monitor':
         return <SystemMonitor />;
       case 'settings':
@@ -56,6 +65,7 @@ export function Layout() {
           {renderContent()}
         </main>
       </div>
+      <NewContentDialog />
     </div>
   );
 }

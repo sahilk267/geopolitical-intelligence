@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api } from '@/lib/api';
 import type {
   ContentItem,
   RiskAssessment,
@@ -22,6 +23,9 @@ import type {
   SystemHealth,
   FetchTestResult,
   LogLevel,
+  VideoJob,
+  VideoPipelineStatus,
+  AutomationSchedule,
 } from '@/types';
 
 // --------------------------------------------
@@ -32,26 +36,26 @@ interface AppState {
   // Content Management
   contents: ContentItem[];
   currentContent: ContentItem | null;
-  
+
   // Risk Governance
   riskAssessments: RiskAssessment[];
   safeModeEnabled: boolean;
   riskThreshold: number;
-  
+
   // ERI System
   eriHistory: ERIAssessment[];
   currentERI: ERIAssessment | null;
-  
+
   // Weekly Briefs
   weeklyBriefs: WeeklyBrief[];
   currentBrief: WeeklyBrief | null;
-  
+
   // Evidence Archive
   evidenceArchive: EvidenceItem[];
-  
+
   // Audience Intelligence
   audienceFeedback: AudienceFeedback[];
-  
+
   // Data Sources & Monitoring
   dataSources: DataSource[];
   fetchedArticles: FetchedArticle[];
@@ -59,41 +63,47 @@ interface AppState {
   systemHealth: SystemHealth;
   fetchTestResults: FetchTestResult[];
   isFetching: boolean;
-  
+
+  // Video Production
+  videoJobs: VideoJob[];
+  videoPipelineStatus: VideoPipelineStatus | null;
+  automationSchedules: AutomationSchedule[];
+
   // Users
   currentUser: User | null;
   users: User[];
-  
+
   // Settings
   settings: SystemSettings;
-  
+
   // UI State
   activeTab: string;
   sidebarOpen: boolean;
-  
+  createDialogOpen: boolean;
+
   // Actions
-  addContent: (content: ContentItem) => void;
+  addContent: (content: ContentItem) => Promise<void>;
   updateContent: (id: string, updates: Partial<ContentItem>) => void;
   deleteContent: (id: string) => void;
   setCurrentContent: (content: ContentItem | null) => void;
   moveToStage: (contentId: string, stage: WorkflowStage) => void;
-  
+
   addRiskAssessment: (assessment: RiskAssessment) => void;
   updateRiskAssessment: (id: string, updates: Partial<RiskAssessment>) => void;
   toggleSafeMode: () => void;
   setRiskThreshold: (threshold: number) => void;
-  
+
   addERIAssessment: (assessment: ERIAssessment) => void;
   setCurrentERI: (assessment: ERIAssessment | null) => void;
-  
+
   addWeeklyBrief: (brief: WeeklyBrief) => void;
   setCurrentBrief: (brief: WeeklyBrief | null) => void;
-  
+
   addEvidence: (evidence: EvidenceItem) => void;
   deleteEvidence: (id: string) => void;
-  
+
   addAudienceFeedback: (feedback: AudienceFeedback) => void;
-  
+
   // Data Source Actions
   addDataSource: (source: DataSource) => void;
   updateDataSource: (id: string, updates: Partial<DataSource>) => void;
@@ -102,20 +112,21 @@ interface AppState {
   testDataSource: (id: string) => Promise<FetchTestResult>;
   fetchFromSource: (id: string) => Promise<void>;
   fetchAllSources: () => Promise<void>;
-  
+
   // Log Actions
   addLog: (log: SystemLog) => void;
   clearLogs: () => void;
   resolveLog: (id: string) => void;
-  
+
   // User Actions
   setCurrentUser: (user: User | null) => void;
   addUser: (user: User) => void;
-  
+
   updateSettings: (settings: Partial<SystemSettings>) => void;
   setActiveTab: (tab: string) => void;
   toggleSidebar: () => void;
-  
+  setCreateDialogOpen: (open: boolean) => void;
+
   // Computed
   getDashboardStats: () => DashboardStats;
   getContentsByStage: (stage: WorkflowStage) => ContentItem[];
@@ -124,6 +135,24 @@ interface AppState {
   getActiveSources: () => DataSource[];
   getErrorSources: () => DataSource[];
   getLogsByLevel: (level: LogLevel) => SystemLog[];
+
+  // Data Fetching Actions
+  fetchAllData: () => Promise<void>;
+  fetchDashboardStats: () => Promise<void>;
+  fetchERIHistory: () => Promise<void>;
+  fetchDataSources: () => Promise<void>;
+  fetchArticles: () => Promise<void>;
+  fetchContents: () => Promise<void>;
+  fetchVideoJobs: (status?: string, scriptId?: string) => Promise<void>;
+  createVideoJob: (data: { script_id: string; priority?: number; resolution?: string }) => Promise<void>;
+  cancelVideoJob: (jobId: string) => Promise<void>;
+  fetchVideoPipelineStatus: () => Promise<void>;
+  fetchAutomationSchedules: () => Promise<void>;
+  createAutomationSchedule: (data: any) => Promise<void>;
+  updateAutomationSchedule: (id: string, data: any) => Promise<void>;
+  deleteAutomationSchedule: (id: string) => Promise<void>;
+  runAutomationScheduleNow: (id: string) => Promise<void>;
+  resetState: () => void;
 }
 
 // --------------------------------------------
@@ -142,387 +171,7 @@ const initialSettings: SystemSettings = {
   tagline: 'Context. Evidence. Strategy.',
 };
 
-const sampleERI: ERIAssessment = {
-  id: 'eri-001',
-  weekNumber: 12,
-  year: 2026,
-  overallScore: 58,
-  classification: 'Elevated',
-  dimensions: [
-    {
-      name: 'Military',
-      score: 62,
-      weight: 0.25,
-      indicators: [
-        { id: 'm1', name: 'Troop Movements', value: 65, trend: 'up', description: 'Increased activity along border regions' },
-        { id: 'm2', name: 'Airstrikes', value: 58, trend: 'stable', description: 'Continued operations at similar pace' },
-      ],
-    },
-    {
-      name: 'Political',
-      score: 55,
-      weight: 0.25,
-      indicators: [
-        { id: 'p1', name: 'Diplomatic Statements', value: 45, trend: 'down', description: 'Harsher rhetoric from key actors' },
-        { id: 'p2', name: 'Sanctions Activity', value: 65, trend: 'up', description: 'New sanctions announced' },
-      ],
-    },
-    {
-      name: 'Proxy',
-      score: 60,
-      weight: 0.20,
-      indicators: [
-        { id: 'px1', name: 'Militia Activity', value: 62, trend: 'up', description: 'Increased proxy engagements' },
-      ],
-    },
-    {
-      name: 'Economic',
-      score: 52,
-      weight: 0.15,
-      indicators: [
-        { id: 'e1', name: 'Oil Price Volatility', value: 55, trend: 'up', description: 'Brent crude showing instability' },
-      ],
-    },
-    {
-      name: 'Diplomatic',
-      score: 48,
-      weight: 0.15,
-      indicators: [
-        { id: 'd1', name: 'Negotiation Progress', value: 40, trend: 'down', description: 'Stalled talks' },
-      ],
-    },
-  ],
-  keyDevelopments: [
-    {
-      id: 'kd1',
-      headline: 'Strait of Hormuz Tensions',
-      whatHappened: 'Naval presence increased in critical chokepoint',
-      whyItMatters: 'Global energy security implications',
-      whoBenefits: 'Alternative energy exporters',
-      whoLoses: 'Import-dependent economies',
-      escalationImpact: 7,
-    },
-  ],
-  scenarioOutlook: [
-    {
-      id: 's1',
-      name: 'Stabilization Path',
-      probability: 'low',
-      description: 'Diplomatic breakthrough reduces tensions',
-      triggers: ['Negotiation resumption', 'Third-party mediation'],
-    },
-    {
-      id: 's2',
-      name: 'Controlled Escalation',
-      probability: 'high',
-      description: 'Limited conflict with contained scope',
-      triggers: ['Proxy escalation', 'Retaliatory strikes'],
-    },
-    {
-      id: 's3',
-      name: 'Expanded Regional Conflict',
-      probability: 'moderate',
-      description: 'Multi-actor involvement broadens conflict',
-      triggers: ['Alliance activation', 'Critical infrastructure attack'],
-    },
-  ],
-  indicatorsToWatch: [
-    'Diplomatic meeting scheduled',
-    'Military drill announcements',
-    'Sanctions vote in UN',
-    'OPEC production decision',
-  ],
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
 
-// Sample Data Sources
-const sampleDataSources: DataSource[] = [
-  {
-    id: 'source-reuters',
-    name: 'Reuters World News',
-    url: 'https://www.reuters.com/world/rss.xml',
-    type: 'rss',
-    status: 'active',
-    category: 'International News',
-    region: 'Global',
-    lastFetchAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    lastFetchStatus: 'success',
-    lastFetchError: null,
-    fetchCount: 156,
-    successCount: 152,
-    errorCount: 4,
-    averageResponseTime: 1200,
-    itemsFetched: 2847,
-    isEnabled: true,
-    fetchInterval: 30,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'source-aljazeera',
-    name: 'Al Jazeera Middle East',
-    url: 'https://www.aljazeera.com/xml/rss/all.xml',
-    type: 'rss',
-    status: 'active',
-    category: 'Regional News',
-    region: 'Middle East',
-    lastFetchAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    lastFetchStatus: 'success',
-    lastFetchError: null,
-    fetchCount: 142,
-    successCount: 138,
-    errorCount: 4,
-    averageResponseTime: 1500,
-    itemsFetched: 2156,
-    isEnabled: true,
-    fetchInterval: 30,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'source-bbc',
-    name: 'BBC World',
-    url: 'http://feeds.bbci.co.uk/news/world/rss.xml',
-    type: 'rss',
-    status: 'error',
-    category: 'International News',
-    region: 'Global',
-    lastFetchAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    lastFetchStatus: 'error',
-    lastFetchError: 'Connection timeout after 30000ms',
-    fetchCount: 200,
-    successCount: 185,
-    errorCount: 15,
-    averageResponseTime: 2800,
-    itemsFetched: 3421,
-    isEnabled: true,
-    fetchInterval: 30,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'source-ft',
-    name: 'Financial Times',
-    url: 'https://www.ft.com/world?format=rss',
-    type: 'rss',
-    status: 'paused',
-    category: 'Financial News',
-    region: 'Global',
-    lastFetchAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    lastFetchStatus: 'success',
-    lastFetchError: null,
-    fetchCount: 89,
-    successCount: 85,
-    errorCount: 4,
-    averageResponseTime: 2100,
-    itemsFetched: 1245,
-    isEnabled: false,
-    fetchInterval: 60,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'source-mea',
-    name: 'MEA World News API',
-    url: 'https://api.mea-news.com/v1/headlines',
-    type: 'api',
-    status: 'active',
-    category: 'Regional News',
-    region: 'Middle East',
-    lastFetchAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    lastFetchStatus: 'success',
-    lastFetchError: null,
-    fetchCount: 320,
-    successCount: 318,
-    errorCount: 2,
-    averageResponseTime: 800,
-    itemsFetched: 4520,
-    isEnabled: true,
-    fetchInterval: 15,
-    headers: { 'Authorization': 'Bearer ***', 'Content-Type': 'application/json' },
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-// Sample System Logs
-const sampleSystemLogs: SystemLog[] = [
-  {
-    id: 'log-001',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    level: 'success',
-    category: 'Data Fetch',
-    message: 'Successfully fetched 23 articles from Reuters World News',
-    source: 'source-reuters',
-    resolved: true,
-    resolvedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'log-002',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    level: 'error',
-    category: 'Data Fetch',
-    message: 'Failed to fetch from BBC World',
-    details: 'Connection timeout after 30000ms. The server may be temporarily unavailable.',
-    source: 'source-bbc',
-    resolved: false,
-  },
-  {
-    id: 'log-003',
-    timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-    level: 'warning',
-    category: 'Risk Assessment',
-    message: 'High-risk content detected requiring senior review',
-    details: 'Content ID: content-003 has risk score of 67, above threshold of 40',
-    resolved: false,
-  },
-  {
-    id: 'log-004',
-    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    level: 'info',
-    category: 'System',
-    message: 'Weekly ERI assessment generated',
-    resolved: true,
-    resolvedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'log-005',
-    timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-    level: 'error',
-    category: 'API',
-    message: 'API rate limit exceeded for MEA World News',
-    details: 'Received 429 Too Many Requests. Retry after 3600 seconds.',
-    source: 'source-mea',
-    resolved: true,
-    resolvedAt: new Date(Date.now() - 11 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'log-006',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    level: 'critical',
-    category: 'System',
-    message: 'Database backup failed',
-    details: 'Insufficient storage space for backup. Please free up at least 5GB.',
-    resolved: true,
-    resolvedAt: new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString(),
-    resolvedBy: 'Admin',
-  },
-];
-
-// Sample Fetched Articles
-const sampleFetchedArticles: FetchedArticle[] = [
-  {
-    id: 'article-001',
-    sourceId: 'source-reuters',
-    title: 'Iran says it has begun enriching uranium to 60% purity at Fordow plant',
-    summary: 'Iran has begun enriching uranium to 60% purity at its underground Fordow nuclear facility, the country\'s nuclear chief said on Saturday.',
-    url: 'https://www.reuters.com/world/middle-east/',
-    publishedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    fetchedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    status: 'new',
-    tags: ['iran', 'nuclear', 'uranium'],
-    relevanceScore: 85,
-  },
-  {
-    id: 'article-002',
-    sourceId: 'source-aljazeera',
-    title: 'Saudi Arabia and Iran agree to restore diplomatic ties',
-    summary: 'Saudi Arabia and Iran have agreed to restore diplomatic relations and reopen embassies within two months.',
-    url: 'https://www.aljazeera.com/news/',
-    publishedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    fetchedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    status: 'processed',
-    tags: ['saudi-arabia', 'iran', 'diplomacy'],
-    relevanceScore: 92,
-  },
-  {
-    id: 'article-003',
-    sourceId: 'source-mea',
-    title: 'Israel conducts airstrikes in Syria, targets Iranian positions',
-    summary: 'Israeli warplanes conducted airstrikes in Syria targeting positions associated with Iranian-backed militias.',
-    url: 'https://api.mea-news.com/article/12345',
-    publishedAt: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
-    fetchedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    status: 'flagged',
-    tags: ['israel', 'syria', 'iran', 'airstrike'],
-    relevanceScore: 95,
-  },
-];
-
-// System Health
-const sampleSystemHealth: SystemHealth = {
-  overall: 'healthy',
-  lastCheck: new Date().toISOString(),
-  services: [
-    { name: 'RSS Feed Service', status: 'up', responseTime: 120, lastChecked: new Date().toISOString() },
-    { name: 'API Gateway', status: 'up', responseTime: 85, lastChecked: new Date().toISOString() },
-    { name: 'Risk Assessment Engine', status: 'up', responseTime: 250, lastChecked: new Date().toISOString() },
-    { name: 'Database', status: 'up', responseTime: 45, lastChecked: new Date().toISOString() },
-    { name: 'Storage', status: 'degraded', responseTime: 500, lastChecked: new Date().toISOString(), errorMessage: 'High disk usage (87%)' },
-  ],
-};
-
-const sampleContents: ContentItem[] = [
-  {
-    id: 'content-001',
-    headline: 'Understanding the Israel-Iran Strategic Rivalry: A Timeline Analysis',
-    summary: 'Foundational context video examining the evolution of deterrence structure between Israel and Iran.',
-    currentStage: 'archive_publish',
-    layers: ['factual_reporting', 'historical_context', 'analytical_assessment'],
-    sources: [
-      {
-        id: 'src1',
-        url: 'https://example.com/source1',
-        title: 'Official Treaty Document',
-        tier: 1,
-        timestamp: new Date().toISOString(),
-        credibilityScore: 95,
-      },
-    ],
-    priority: 1,
-    assignedTo: 'editor-001',
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-    publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    status: 'published',
-    tags: ['israel', 'iran', 'strategic-rivalry', 'foundational'],
-    region: 'Middle East',
-    topic: 'Strategic Analysis',
-  },
-  {
-    id: 'content-002',
-    headline: 'The Strait of Hormuz: Why This Chokepoint Shapes Global Energy Markets',
-    summary: 'Analysis of the strategic importance of the Strait of Hormuz for global energy security.',
-    currentStage: 'editorial_review',
-    layers: ['factual_reporting', 'analytical_assessment'],
-    sources: [],
-    priority: 2,
-    assignedTo: 'editor-002',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: 'in_review',
-    tags: ['hormuz', 'energy', 'oil', 'chokepoint'],
-    region: 'Middle East',
-    topic: 'Energy Security',
-  },
-  {
-    id: 'content-003',
-    headline: 'Proxy Warfare in the Middle-East: Structure, Strategy, and Escalation Risk',
-    summary: 'Structured mapping of proxy warfare dynamics in the region.',
-    currentStage: 'risk_scoring',
-    layers: ['factual_reporting', 'analytical_assessment', 'scenario_analysis'],
-    sources: [],
-    priority: 1,
-    assignedTo: 'editor-001',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: 'draft',
-    tags: ['proxy-warfare', 'escalation', 'militias'],
-    region: 'Middle East',
-    topic: 'Conflict Analysis',
-  },
-];
 
 // --------------------------------------------
 // STORE CREATION
@@ -530,59 +179,87 @@ const sampleContents: ContentItem[] = [
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set: any, get: any) => ({
       // Initial State
-      contents: sampleContents,
+      contents: [],
       currentContent: null,
       riskAssessments: [],
       safeModeEnabled: false,
       riskThreshold: 40,
-      eriHistory: [sampleERI],
-      currentERI: sampleERI,
+      eriHistory: [],
+      currentERI: null,
       weeklyBriefs: [],
       currentBrief: null,
       evidenceArchive: [],
       audienceFeedback: [],
-      dataSources: sampleDataSources,
-      fetchedArticles: sampleFetchedArticles,
-      systemLogs: sampleSystemLogs,
-      systemHealth: sampleSystemHealth,
+      dataSources: [],
+      fetchedArticles: [],
+      systemLogs: [],
+      systemHealth: {
+        overall: 'healthy',
+        lastCheck: new Date().toISOString(),
+        services: [],
+      },
       fetchTestResults: [],
       isFetching: false,
+      videoJobs: [],
+      videoPipelineStatus: null,
+      automationSchedules: [],
       currentUser: null,
       users: [],
       settings: initialSettings,
       activeTab: 'dashboard',
       sidebarOpen: true,
+      createDialogOpen: false,
 
       // Content Actions
-      addContent: (content) => {
-        set((state) => ({
-          contents: [content, ...state.contents],
-        }));
+      addContent: async (content: ContentItem) => {
+        try {
+          const newArticle = await api.createContent({
+            headline: content.headline,
+            content: content.summary, // Model uses 'content' for the body
+            summary: content.summary,
+            category: content.topic,
+            region: content.region,
+            priority: content.priority,
+            tags: content.tags,
+          }) as any;
+
+          set((state: AppState) => ({
+            contents: [{
+              ...content,
+              id: newArticle.id,
+              createdAt: newArticle.created_at,
+              updatedAt: newArticle.created_at,
+            }, ...state.contents],
+          }));
+        } catch (error) {
+          console.error('Failed to create content:', error);
+          throw error;
+        }
       },
 
-      updateContent: (id, updates) => {
-        set((state) => ({
-          contents: state.contents.map((c) =>
+      updateContent: (id: string, updates: Partial<ContentItem>) => {
+        set((state: AppState) => ({
+          contents: state.contents.map((c: ContentItem) =>
             c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
           ),
         }));
       },
 
-      deleteContent: (id) => {
-        set((state) => ({
-          contents: state.contents.filter((c) => c.id !== id),
+      deleteContent: (id: string) => {
+        set((state: AppState) => ({
+          contents: state.contents.filter((c: ContentItem) => c.id !== id),
         }));
       },
 
-      setCurrentContent: (content) => {
+      setCurrentContent: (content: ContentItem | null) => {
         set({ currentContent: content });
       },
 
-      moveToStage: (contentId, stage) => {
-        set((state) => ({
-          contents: state.contents.map((c) =>
+      moveToStage: (contentId: string, stage: WorkflowStage) => {
+        set((state: AppState) => ({
+          contents: state.contents.map((c: ContentItem) =>
             c.id === contentId
               ? { ...c, currentStage: stage, updatedAt: new Date().toISOString() }
               : c
@@ -591,243 +268,340 @@ export const useAppStore = create<AppState>()(
       },
 
       // Risk Actions
-      addRiskAssessment: (assessment) => {
-        set((state) => ({
+      addRiskAssessment: (assessment: RiskAssessment) => {
+        set((state: AppState) => ({
           riskAssessments: [assessment, ...state.riskAssessments],
         }));
       },
 
-      updateRiskAssessment: (id, updates) => {
-        set((state) => ({
-          riskAssessments: state.riskAssessments.map((ra) =>
+      updateRiskAssessment: (id: string, updates: Partial<RiskAssessment>) => {
+        set((state: AppState) => ({
+          riskAssessments: state.riskAssessments.map((ra: RiskAssessment) =>
             ra.id === id ? { ...ra, ...updates } : ra
           ),
         }));
       },
 
-      toggleSafeMode: () => {
-        set((state) => ({
-          safeModeEnabled: !state.safeModeEnabled,
-        }));
+      toggleSafeMode: async () => {
+        const currentStatus = get().safeModeEnabled;
+        try {
+          const result = await api.toggleSafeMode(!currentStatus) as { enabled: boolean };
+          set({ safeModeEnabled: result.enabled });
+        } catch (error) {
+          console.error('Failed to toggle safe mode:', error);
+        }
       },
 
-      setRiskThreshold: (threshold) => {
+      setRiskThreshold: (threshold: number) => {
         set({ riskThreshold: threshold });
       },
 
+      resetState: () => {
+        localStorage.removeItem('strategic-context-storage');
+        window.location.reload();
+      },
+
       // ERI Actions
-      addERIAssessment: (assessment) => {
-        set((state) => ({
+      addERIAssessment: (assessment: ERIAssessment) => {
+        set((state: AppState) => ({
           eriHistory: [assessment, ...state.eriHistory],
         }));
       },
 
-      setCurrentERI: (assessment) => {
+      setCurrentERI: (assessment: ERIAssessment | null) => {
         set({ currentERI: assessment });
       },
 
       // Weekly Brief Actions
-      addWeeklyBrief: (brief) => {
-        set((state) => ({
+      addWeeklyBrief: (brief: WeeklyBrief) => {
+        set((state: AppState) => ({
           weeklyBriefs: [brief, ...state.weeklyBriefs],
         }));
       },
 
-      setCurrentBrief: (brief) => {
+      setCurrentBrief: (brief: WeeklyBrief | null) => {
         set({ currentBrief: brief });
       },
 
       // Evidence Actions
-      addEvidence: (evidence) => {
-        set((state) => ({
+      addEvidence: (evidence: EvidenceItem) => {
+        set((state: AppState) => ({
           evidenceArchive: [evidence, ...state.evidenceArchive],
         }));
       },
 
-      deleteEvidence: (id) => {
-        set((state) => ({
-          evidenceArchive: state.evidenceArchive.filter((e) => e.id !== id),
+      deleteEvidence: (id: string) => {
+        set((state: AppState) => ({
+          evidenceArchive: state.evidenceArchive.filter((e: EvidenceItem) => e.id !== id),
         }));
       },
 
       // Audience Actions
-      addAudienceFeedback: (feedback) => {
-        set((state) => ({
+      addAudienceFeedback: (feedback: AudienceFeedback) => {
+        set((state: AppState) => ({
           audienceFeedback: [feedback, ...state.audienceFeedback],
         }));
       },
 
       // Data Source Actions
-      addDataSource: (source) => {
-        set((state) => ({
+      addDataSource: (source: DataSource) => {
+        set((state: AppState) => ({
           dataSources: [source, ...state.dataSources],
         }));
       },
 
-      updateDataSource: (id, updates) => {
-        set((state) => ({
-          dataSources: state.dataSources.map((s) =>
+      updateDataSource: (id: string, updates: Partial<DataSource>) => {
+        set((state: AppState) => ({
+          dataSources: state.dataSources.map((s: DataSource) =>
             s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s
           ),
         }));
       },
 
-      deleteDataSource: (id) => {
-        set((state) => ({
-          dataSources: state.dataSources.filter((s) => s.id !== id),
+      deleteDataSource: (id: string) => {
+        set((state: AppState) => ({
+          dataSources: state.dataSources.filter((s: DataSource) => s.id !== id),
         }));
       },
 
-      toggleDataSource: (id) => {
-        set((state) => ({
-          dataSources: state.dataSources.map((s) =>
+      toggleDataSource: (id: string) => {
+        set((state: AppState) => ({
+          dataSources: state.dataSources.map((s: DataSource) =>
             s.id === id ? { ...s, isEnabled: !s.isEnabled, updatedAt: new Date().toISOString() } : s
           ),
         }));
       },
 
-      testDataSource: async (id) => {
-        const source = get().dataSources.find((s) => s.id === id);
-        if (!source) {
-          throw new Error('Source not found');
-        }
+      testDataSource: async (id: string) => {
+        const source = get().dataSources.find((s: DataSource) => s.id === id);
+        if (!source) throw new Error('Source not found');
 
         const startTime = Date.now();
-        
-        // Simulate API test
-        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 2000));
-        
-        const success = Math.random() > 0.3; // 70% success rate for demo
-        const responseTime = Date.now() - startTime;
-        
-        const result: FetchTestResult = {
-          sourceId: id,
-          timestamp: new Date().toISOString(),
-          success,
-          responseTime,
-          itemsFound: success ? Math.floor(Math.random() * 50) + 10 : 0,
-          errorMessage: success ? undefined : 'Connection timeout or invalid response format',
-          sampleData: success ? { title: 'Sample Article', url: source.url } : undefined,
-        };
+        try {
+          const result = await api.testDataSource(id) as FetchTestResult;
 
-        set((state) => ({
-          fetchTestResults: [result, ...state.fetchTestResults].slice(0, 50),
-        }));
+          set((state: AppState) => ({
+            fetchTestResults: [result, ...state.fetchTestResults].slice(0, 50),
+          }));
 
-        // Update source status
-        get().updateDataSource(id, {
-          lastFetchStatus: success ? 'success' : 'error',
-          lastFetchError: success ? null : result.errorMessage || 'Unknown error',
-          averageResponseTime: Math.round(
-            (source.averageResponseTime * source.fetchCount + responseTime) / (source.fetchCount + 1)
-          ),
-        });
+          // Update source status
+          get().updateDataSource(id, {
+            lastFetchStatus: result.success ? 'success' : 'error',
+            lastFetchError: result.success ? null : result.errorMessage || 'Unknown error',
+          });
 
-        // Add log entry
-        get().addLog({
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          level: success ? 'success' : 'error',
-          category: 'Data Source Test',
-          message: success ? `Test successful for ${source.name}` : `Test failed for ${source.name}`,
-          details: success ? `Found ${result.itemsFound} items in ${responseTime}ms` : result.errorMessage,
-          source: id,
-          resolved: success,
-        });
-
-        return result;
+          return result;
+        } catch (error: any) {
+          const result: FetchTestResult = {
+            sourceId: id,
+            timestamp: new Date().toISOString(),
+            success: false,
+            responseTime: Date.now() - startTime,
+            itemsFound: 0,
+            errorMessage: error.message,
+          };
+          set((state: AppState) => ({
+            fetchTestResults: [result, ...state.fetchTestResults].slice(0, 50),
+          }));
+          return result;
+        }
       },
 
-      fetchFromSource: async (id) => {
+      fetchFromSource: async (id: string) => {
         set({ isFetching: true });
-        const source = get().dataSources.find((s) => s.id === id);
-        if (!source) {
+        try {
+          await api.fetchFromSource(id);
+          // Reload sources and articles after fetch
+          await Promise.all([get().fetchDataSources(), get().fetchArticles()]);
+        } catch (error) {
+          console.error('Fetch failed:', error);
+        } finally {
           set({ isFetching: false });
-          throw new Error('Source not found');
         }
-
-        const startTime = Date.now();
-        
-        // Simulate fetch
-        await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 3000));
-        
-        const success = Math.random() > 0.2; // 80% success rate
-        const responseTime = Date.now() - startTime;
-        const itemsFound = success ? Math.floor(Math.random() * 30) + 5 : 0;
-
-        // Update source
-        set((state) => ({
-          dataSources: state.dataSources.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  lastFetchAt: new Date().toISOString(),
-                  lastFetchStatus: success ? 'success' : 'error',
-                  lastFetchError: success ? null : 'Fetch failed',
-                  fetchCount: s.fetchCount + 1,
-                  successCount: success ? s.successCount + 1 : s.successCount,
-                  errorCount: success ? s.errorCount : s.errorCount + 1,
-                  itemsFetched: s.itemsFetched + itemsFound,
-                  averageResponseTime: Math.round(
-                    (s.averageResponseTime * s.fetchCount + responseTime) / (s.fetchCount + 1)
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : s
-          ),
-        }));
-
-        // Add fetched articles if successful
-        if (success) {
-          const newArticles: FetchedArticle[] = Array.from({ length: itemsFound }, (_, i) => ({
-            id: `article-${Date.now()}-${i}`,
-            sourceId: id,
-            title: `Fetched Article ${i + 1} from ${source.name}`,
-            summary: 'This is a sample fetched article for demonstration purposes.',
-            url: `${source.url}/article/${Date.now()}-${i}`,
-            publishedAt: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000).toISOString(),
-            fetchedAt: new Date().toISOString(),
-            status: 'new',
-            tags: source.region === 'Middle East' ? ['middle-east'] : ['global'],
-            relevanceScore: Math.floor(Math.random() * 40) + 60,
-          }));
-
-          set((state) => ({
-            fetchedArticles: [...newArticles, ...state.fetchedArticles].slice(0, 100),
-          }));
-        }
-
-        // Add log
-        get().addLog({
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          level: success ? 'success' : 'error',
-          category: 'Data Fetch',
-          message: success 
-            ? `Fetched ${itemsFound} articles from ${source.name}` 
-            : `Failed to fetch from ${source.name}`,
-          source: id,
-          resolved: success,
-        });
-
-        set({ isFetching: false });
       },
 
       fetchAllSources: async () => {
         set({ isFetching: true });
-        const activeSources = get().dataSources.filter((s) => s.isEnabled);
-        
-        for (const source of activeSources) {
-          await get().fetchFromSource(source.id);
+        try {
+          const activeSources = get().dataSources.filter((s: DataSource) => s.isEnabled);
+          await Promise.all(activeSources.map((s: DataSource) => api.fetchFromSource(s.id)));
+          await Promise.all([get().fetchDataSources(), get().fetchArticles()]);
+        } catch (error) {
+          console.error('Batch fetch failed:', error);
+        } finally {
+          set({ isFetching: false });
         }
-        
-        set({ isFetching: false });
+      },
+
+      // Fetching Actions
+      fetchAllData: async () => {
+        set({ isFetching: true });
+        try {
+          // Fetch all critical data in parallel
+          const [sources, contents, _stats, eri, history, risk, health, videoStatus] = await Promise.all([
+            api.getDataSources(),
+            api.getContents(),
+            api.getDashboardStats(),
+            api.getCurrentERI(),
+            api.getERIAssessments(),
+            api.getRiskAssessments(),
+            api.getSystemHealth(),
+            api.getVideoPipelineStatus()
+          ]);
+
+          set({
+            dataSources: sources as DataSource[],
+            contents: contents as ContentItem[],
+            currentERI: eri as ERIAssessment,
+            eriHistory: history as ERIAssessment[],
+            riskAssessments: risk as RiskAssessment[],
+            systemHealth: health as SystemHealth,
+            videoPipelineStatus: videoStatus as VideoPipelineStatus,
+            automationSchedules: await api.getAutomationSchedules() as AutomationSchedule[],
+            isFetching: false
+          });
+        } catch (error) {
+          console.error('Failed to fetch data:', error);
+          set({ isFetching: false });
+        }
+      },
+
+      fetchDashboardStats: async () => {
+        try {
+          await api.getDashboardStats();
+          // We don't have a specific state for dashboard stats, they are computed from other state items
+          // but we can at least ensure we have the underlying data
+          await Promise.all([get().fetchContents(), get().fetchDataSources()]);
+        } catch (error) {
+          console.error('Failed to fetch dashboard stats:', error);
+        }
+      },
+
+      fetchERIHistory: async () => {
+        try {
+          const history = await api.getERIAssessments() as ERIAssessment[];
+          set({
+            eriHistory: history,
+            currentERI: history.length > 0 ? history[0] : null
+          });
+        } catch (error) {
+          console.error('Failed to fetch ERI history:', error);
+        }
+      },
+
+      fetchDataSources: async () => {
+        try {
+          const sources = await api.getDataSources() as DataSource[];
+          set({ dataSources: sources });
+        } catch (error) {
+          console.error('Failed to fetch data sources:', error);
+        }
+      },
+
+      fetchArticles: async () => {
+        try {
+          const articles = await api.getArticles() as FetchedArticle[];
+          set({ fetchedArticles: articles });
+        } catch (error) {
+          console.error('Failed to fetch articles:', error);
+        }
+      },
+
+      fetchContents: async () => {
+        try {
+          const contents = await api.getContents() as ContentItem[];
+          set({ contents });
+        } catch (error) {
+          console.error('Failed to fetch contents:', error);
+        }
+      },
+
+      fetchVideoJobs: async (status?: string, scriptId?: string) => {
+        try {
+          const jobs = await api.getVideoJobs(status, scriptId) as VideoJob[];
+          set({ videoJobs: jobs });
+        } catch (error) {
+          console.error('Failed to fetch video jobs:', error);
+        }
+      },
+
+      createVideoJob: async (data: { script_id: string; priority?: number; resolution?: string }) => {
+        try {
+          await api.createVideoJob(data);
+          get().fetchVideoJobs();
+        } catch (error) {
+          console.error('Failed to create video job:', error);
+        }
+      },
+
+      cancelVideoJob: async (jobId: string) => {
+        try {
+          await api.cancelVideoJob(jobId);
+          await Promise.all([get().fetchVideoJobs(), get().fetchVideoPipelineStatus()]);
+        } catch (error) {
+          console.error('Failed to cancel video job:', error);
+          throw error;
+        }
+      },
+
+      fetchVideoPipelineStatus: async () => {
+        try {
+          const status = await api.getVideoPipelineStatus() as VideoPipelineStatus;
+          set({ videoPipelineStatus: status });
+        } catch (error) {
+          console.error('Failed to fetch video pipeline status:', error);
+        }
+      },
+
+      fetchAutomationSchedules: async () => {
+        try {
+          const schedules = await api.getAutomationSchedules() as AutomationSchedule[];
+          set({ automationSchedules: schedules });
+        } catch (error) {
+          console.error('Failed to fetch schedules:', error);
+        }
+      },
+
+      createAutomationSchedule: async (data: any) => {
+        try {
+          await api.createAutomationSchedule(data);
+          get().fetchAutomationSchedules();
+        } catch (error) {
+          console.error('Failed to create schedule:', error);
+        }
+      },
+
+      updateAutomationSchedule: async (id: string, data: any) => {
+        try {
+          await api.updateAutomationSchedule(id, data);
+          get().fetchAutomationSchedules();
+        } catch (error) {
+          console.error('Failed to update schedule:', error);
+        }
+      },
+
+      deleteAutomationSchedule: async (id: string) => {
+        try {
+          await api.deleteAutomationSchedule(id);
+          get().fetchAutomationSchedules();
+        } catch (error) {
+          console.error('Failed to delete schedule:', error);
+        }
+      },
+
+      runAutomationScheduleNow: async (id: string) => {
+        try {
+          await api.runAutomationScheduleNow(id);
+          get().fetchAutomationSchedules();
+        } catch (error) {
+          console.error('Failed to run schedule:', error);
+        }
       },
 
       // Log Actions
-      addLog: (log) => {
-        set((state) => ({
-          systemLogs: [log, ...state.systemLogs].slice(0, 500),
+      addLog: (log: SystemLog) => {
+        set((state: AppState) => ({
+          systemLogs: [log, ...state.systemLogs].slice(0, 100),
         }));
       },
 
@@ -835,108 +609,104 @@ export const useAppStore = create<AppState>()(
         set({ systemLogs: [] });
       },
 
-      resolveLog: (id) => {
-        set((state) => ({
-          systemLogs: state.systemLogs.map((log) =>
-            log.id === id
-              ? { ...log, resolved: true, resolvedAt: new Date().toISOString() }
-              : log
+      resolveLog: (id: string) => {
+        set((state: AppState) => ({
+          systemLogs: state.systemLogs.map((log: SystemLog) =>
+            log.id === id ? { ...log, status: 'resolved' as const } : log
           ),
         }));
       },
 
       // User Actions
-      setCurrentUser: (user) => {
+      setCurrentUser: (user: User | null) => {
         set({ currentUser: user });
       },
 
-      addUser: (user) => {
-        set((state) => ({
-          users: [user, ...state.users],
+      addUser: (user: User) => {
+        set((state: AppState) => ({
+          users: [...state.users, user],
         }));
       },
 
-      // Settings Actions
-      updateSettings: (newSettings) => {
-        set((state) => ({
+      // Settings & UI Actions
+      updateSettings: (newSettings: Partial<SystemSettings>) => {
+        set((state: AppState) => ({
           settings: { ...state.settings, ...newSettings },
         }));
       },
 
-      // UI Actions
-      setActiveTab: (tab) => {
+      setActiveTab: (tab: string) => {
         set({ activeTab: tab });
       },
 
       toggleSidebar: () => {
-        set((state) => ({
-          sidebarOpen: !state.sidebarOpen,
-        }));
+        set((state: AppState) => ({ sidebarOpen: !state.sidebarOpen }));
       },
 
+      setCreateDialogOpen: (open: boolean) => {
+        set({ createDialogOpen: open });
+      },
       // Computed
       getDashboardStats: () => {
-        const state = get();
-        const publishedThisWeek = state.contents.filter(
-          (c) =>
-            c.publishedAt &&
-            new Date(c.publishedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const state = get() as AppState;
+        const total = state.contents.length;
+        const inReview = state.contents.filter((c: ContentItem) =>
+          ['editorial_review', 'final_approval'].includes(c.currentStage)
         ).length;
-
-        const pendingRisk = state.contents.filter(
-          (c) => c.currentStage === 'risk_scoring'
+        const riskAverage = state.riskAssessments.length > 0
+          ? state.riskAssessments.reduce((acc: number, ra: RiskAssessment) => acc + ra.scores.overallScore, 0) / state.riskAssessments.length
+          : 0;
+        const publishedThisWeek = state.contents.filter((c: ContentItem) =>
+          c.publishedAt && new Date(c.publishedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
         ).length;
-
-        const avgRisk =
-          state.riskAssessments.length > 0
-            ? state.riskAssessments.reduce((acc, ra) => acc + ra.scores.overallScore, 0) /
-              state.riskAssessments.length
-            : 0;
 
         return {
-          totalContent: state.contents.length,
-          inReview: state.contents.filter((c) => c.status === 'in_review').length,
-          publishedThisWeek,
-          pendingRiskAssessment: pendingRisk,
-          averageRiskScore: Math.round(avgRisk),
+          totalContent: total,
+          inReview: inReview,
+          publishedThisWeek: publishedThisWeek,
+          pendingRiskAssessment: state.contents.filter((c: ContentItem) => c.currentStage === 'risk_scoring').length,
+          averageRiskScore: Math.round(riskAverage),
           currentERI: state.currentERI?.overallScore || 0,
-          weeklySubscribers: 2847,
-          monthlyRevenue: 425000,
+          weeklySubscribers: 0,
+          monthlyRevenue: 0,
         };
       },
 
-      getContentsByStage: (stage) => {
-        return get().contents.filter((c) => c.currentStage === stage);
+      getContentsByStage: (stage: WorkflowStage) => {
+        return (get() as AppState).contents.filter((c: ContentItem) => c.currentStage === stage);
       },
 
-      getContentsByRisk: (minRisk) => {
-        return get().contents.filter((c) => {
-          const risk = get().riskAssessments.find((ra) => ra.contentId === c.id);
-          return risk && risk.scores.overallScore >= minRisk;
+      getContentsByRisk: (minRisk: number) => {
+        const state = get() as AppState;
+        return state.contents.filter((c: ContentItem) => {
+          const assessment = state.riskAssessments.find((ra: RiskAssessment) => ra.contentId === c.id);
+          return assessment ? assessment.scores.overallScore >= minRisk : false;
         });
       },
 
       getPendingApprovals: () => {
-        return get().contents.filter(
-          (c) => c.currentStage === 'final_approval' || c.currentStage === 'editorial_review'
+        return (get() as AppState).contents.filter((c: ContentItem) =>
+          ['editorial_review', 'final_approval'].includes(c.currentStage)
         );
       },
 
       getActiveSources: () => {
-        return get().dataSources.filter((s) => s.isEnabled && s.status === 'active');
+        return (get() as AppState).dataSources.filter((s: DataSource) => s.isEnabled);
       },
 
       getErrorSources: () => {
-        return get().dataSources.filter((s) => s.status === 'error' || s.lastFetchStatus === 'error');
+        return (get() as AppState).dataSources.filter((s: DataSource) => s.lastFetchStatus === 'error');
       },
 
-      getLogsByLevel: (level) => {
-        return get().systemLogs.filter((log) => log.level === level);
+      getLogsByLevel: (level: LogLevel) => {
+        return (get() as AppState).systemLogs.filter((log: SystemLog) => log.level === level);
       },
     }),
     {
       name: 'strategic-context-storage',
-      partialize: (state) => ({
+      partialize: (state: AppState) => ({
+        settings: state.settings,
+        sidebarOpen: state.sidebarOpen,
         contents: state.contents,
         riskAssessments: state.riskAssessments,
         safeModeEnabled: state.safeModeEnabled,
@@ -947,7 +717,8 @@ export const useAppStore = create<AppState>()(
         dataSources: state.dataSources,
         fetchedArticles: state.fetchedArticles,
         systemLogs: state.systemLogs,
-        settings: state.settings,
+        videoJobs: state.videoJobs,
+        automationSchedules: state.automationSchedules,
       }),
     }
   )

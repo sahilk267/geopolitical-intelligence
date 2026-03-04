@@ -17,6 +17,7 @@ from app.models.script import Script, ScriptSegment, ScriptStatus, ScriptLayer
 from app.models.video import VideoJob, VideoJobStatus
 from app.models.audit import AuditLog, AuditAction
 from app.models.brief import WeeklyBrief
+from app.models.automation import AutomationSchedule, AutomationTaskType
 
 __all__ = [
     "User",
@@ -53,4 +54,6 @@ __all__ = [
     "AuditLog",
     "AuditAction",
     "WeeklyBrief",
+    "AutomationSchedule",
+    "AutomationTaskType",
 ]

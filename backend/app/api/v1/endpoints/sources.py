@@ -187,60 +187,12 @@ async def fetch_from_source(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.JUNIOR_EDITOR))
 ):
-    """Manually fetch from source using feedparser."""
-    import feedparser
-    import httpx
-    from datetime import datetime
-    from app.models.article import RawArticle
-    
-    result = await db.execute(select(Source).where(Source.id == source_id))
-    source = result.scalar_one_or_none()
-    
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-    
-    if not source.is_enabled:
-        raise HTTPException(status_code=400, detail="Source is disabled")
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(source.url, timeout=settings.REQUEST_TIMEOUT_SECONDS)
-            feed = feedparser.parse(response.text)
-            
-        items_found = 0
-        for entry in feed.entries[:settings.MAX_ARTICLES_PER_FETCH]:
-            # Simple check if article already exists
-            existing = await db.execute(select(RawArticle).where(RawArticle.url == entry.link))
-            if existing.scalar_one_or_none():
-                continue
-                
-            raw_article = RawArticle(
-                source_id=source_id,
-                title=entry.get('title', 'No Title'),
-                content=entry.get('summary', entry.get('description', '')),
-                url=entry.link,
-                published_at=datetime.utcnow(),
-                category=source.category,
-                region=source.region
-            )
-            db.add(raw_article)
-            items_found += 1
-            
-        source.last_fetch_at = datetime.utcnow()
-        source.last_fetch_status = "success"
-        source.fetch_count += 1
-        source.items_fetched += items_found
-        source.success_count += 1
-        
-        await db.commit()
-        return {"success": True, "items_fetched": items_found, "source": source.to_dict()}
-        
-    except Exception as e:
-        source.last_fetch_status = "error"
-        source.last_fetch_error = str(e)
-        source.error_count += 1
-        await db.commit()
-        return {"success": False, "error": str(e), "source": source.to_dict()}
+    """Manually fetch from source."""
+    from app.services.source_service import source_service
+    result = await source_service.fetch_from_source(source_id, db)
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    return result
 
 
 @router.post("/fetch-all")

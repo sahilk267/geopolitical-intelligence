@@ -3,7 +3,7 @@
 // Data Sources, RSS Feeds, Error Logs & Health Monitoring
 // ============================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,10 @@ import {
   Filter,
   Search,
   Trash,
+  Calendar,
+  Clock,
+  Play,
+  Settings,
 } from 'lucide-react';
 import type { DataSource, LogLevel, DataSourceType, DataSourceStatus } from '@/types';
 
@@ -89,6 +93,11 @@ export function SystemMonitor() {
     resolveLog,
     getActiveSources,
     getErrorSources,
+    automationSchedules,
+    fetchAutomationSchedules,
+    updateAutomationSchedule,
+    deleteAutomationSchedule,
+    runAutomationScheduleNow,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState('sources');
@@ -96,6 +105,10 @@ export function SystemMonitor() {
   const [testingSourceId, setTestingSourceId] = useState<string | null>(null);
   const [logFilter, setLogFilter] = useState<LogLevel | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    fetchAutomationSchedules();
+  }, [fetchAutomationSchedules]);
 
   const activeSources = getActiveSources();
   const errorSources = getErrorSources();
@@ -266,6 +279,10 @@ export function SystemMonitor() {
           <TabsTrigger value="articles" className="data-[state=active]:bg-[#C7A84A] data-[state=active]:text-[#0B1F3A]">
             <FileText className="w-4 h-4 mr-2" />
             Fetched Articles
+          </TabsTrigger>
+          <TabsTrigger value="schedules" className="data-[state=active]:bg-[#C7A84A] data-[state=active]:text-[#0B1F3A]">
+            <Calendar className="w-4 h-4 mr-2" />
+            Schedules
           </TabsTrigger>
         </TabsList>
 
@@ -539,9 +556,8 @@ export function SystemMonitor() {
             {filteredLogs.map((log) => (
               <div
                 key={log.id}
-                className={`p-3 rounded-lg border ${
-                  log.resolved ? 'border-slate-700/30 bg-slate-800/30' : 'border-slate-700/50 bg-slate-800/50'
-                }`}
+                className={`p-3 rounded-lg border ${log.resolved ? 'border-slate-700/30 bg-slate-800/30' : 'border-slate-700/50 bg-slate-800/50'
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
@@ -628,13 +644,12 @@ export function SystemMonitor() {
                     <div className="text-right">
                       <Badge
                         variant="outline"
-                        className={`text-xs ${
-                          service.status === 'up'
-                            ? 'border-green-500/30 text-green-400'
-                            : service.status === 'degraded'
+                        className={`text-xs ${service.status === 'up'
+                          ? 'border-green-500/30 text-green-400'
+                          : service.status === 'degraded'
                             ? 'border-amber-500/30 text-amber-400'
                             : 'border-red-500/30 text-red-400'
-                        }`}
+                          }`}
                       >
                         {service.status.toUpperCase()}
                       </Badge>
@@ -670,15 +685,14 @@ export function SystemMonitor() {
                           <h3 className="font-medium text-white">{article.title}</h3>
                           <Badge
                             variant="outline"
-                            className={`text-[10px] ${
-                              article.status === 'new'
-                                ? 'border-blue-500/30 text-blue-400'
-                                : article.status === 'processed'
+                            className={`text-[10px] ${article.status === 'new'
+                              ? 'border-blue-500/30 text-blue-400'
+                              : article.status === 'processed'
                                 ? 'border-green-500/30 text-green-400'
                                 : article.status === 'flagged'
-                                ? 'border-amber-500/30 text-amber-400'
-                                : 'border-red-500/30 text-red-400'
-                            }`}
+                                  ? 'border-amber-500/30 text-amber-400'
+                                  : 'border-red-500/30 text-red-400'
+                              }`}
                           >
                             {article.status}
                           </Badge>
@@ -709,6 +723,111 @@ export function SystemMonitor() {
                 <FileText className="w-12 h-12 mx-auto mb-3 text-slate-600" />
                 <p>No articles fetched yet</p>
                 <p className="text-sm">Use the Fetch buttons to retrieve articles from sources</p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Schedules Tab */}
+        <TabsContent value="schedules" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">Automation Schedules</h2>
+            <Button className="bg-[#C7A84A] hover:bg-[#d4b65c] text-[#0B1F3A]">
+              <Plus className="w-4 h-4 mr-2" />
+              New Schedule
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {automationSchedules.map((schedule) => (
+              <Card key={schedule.id} className="bg-[#0B1F3A]/50 border-slate-700/50">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
+                        <Clock className="w-5 h-5 text-[#C7A84A]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium text-white">{schedule.name}</h3>
+                          <Badge variant="outline" className={`text-[10px] ${schedule.isEnabled ? 'border-green-500/30 text-green-400' : 'border-slate-500/30 text-slate-400'}`}>
+                            {schedule.isEnabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{schedule.description}</p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Zap className="w-3 h-3" />
+                            {schedule.taskType.replace('_', ' ')}
+                          </span>
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {schedule.cronExpression || `${schedule.intervalMinutes}m interval`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={schedule.isEnabled}
+                      onCheckedChange={(checked) => updateAutomationSchedule(schedule.id, { isEnabled: checked })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-700/50">
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-white">{schedule.runCount}</p>
+                      <p className="text-[10px] text-slate-500">Total Runs</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-green-400">{schedule.successCount}</p>
+                      <p className="text-[10px] text-slate-500">Success</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-red-400">{schedule.failureCount}</p>
+                      <p className="text-[10px] text-slate-500">Failures</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                      onClick={() => runAutomationScheduleNow(schedule.id)}
+                    >
+                      <Play className="w-3 h-3 mr-1" />
+                      Run Now
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                    >
+                      <Settings className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                      onClick={() => deleteAutomationSchedule(schedule.id)}
+                    >
+                      <Trash className="w-3 h-3" />
+                    </Button>
+                  </div>
+
+                  {schedule.lastRunAt && (
+                    <p className="text-[10px] text-slate-500 mt-2">
+                      Last run: {new Date(schedule.lastRunAt).toLocaleString()}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+            {automationSchedules.length === 0 && (
+              <div className="col-span-full text-center py-12 text-slate-500 bg-slate-800/20 rounded-xl border border-dashed border-slate-700">
+                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p>No automation schedules configured</p>
+                <p className="text-xs mt-1">Configure automated content fetching, video generation, and more</p>
               </div>
             )}
           </div>

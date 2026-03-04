@@ -276,6 +276,28 @@ export function Settings() {
                 Manage
               </Button>
             </div>
+
+            <div className="pt-4 border-t border-slate-700/50">
+              <p className="text-sm font-medium text-red-400 mb-2">Destructive Actions</p>
+              <div className="flex items-center justify-between p-3 bg-red-500/5 rounded-lg border border-red-500/20">
+                <div>
+                  <p className="text-sm text-white">Reset System State</p>
+                  <p className="text-xs text-slate-500">Clear all local storage and reload</p>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('Are you sure? This will clear all local data and reload the app.')) {
+                      useAppStore.getState().resetState();
+                    }
+                  }}
+                  className="bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/50"
+                >
+                  Reset State
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

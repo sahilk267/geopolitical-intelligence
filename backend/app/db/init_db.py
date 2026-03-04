@@ -14,10 +14,8 @@ from app.models import (
     Contradiction, ContradictionStatus,
     RiskScore, RiskDimension,
     ERIAssessment, ERIDimension, ERIClassification,
-    Script, ScriptSegment, ScriptStatus, ScriptLayer,
-    VideoJob, VideoJobStatus,
-    AuditLog, AuditAction,
     WeeklyBrief,
+    AutomationSchedule, AutomationTaskType,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,3 +99,35 @@ async def create_initial_data(db: AsyncSession):
     
     await db.commit()
     logger.info("Sample sources created")
+    
+    # Create sample automation schedules
+    schedules = [
+        {
+            "name": "Global News Fetching",
+            "description": "Fetch news from all enabled sources every 30 minutes",
+            "task_type": AutomationTaskType.FETCH_SOURCES,
+            "interval_minutes": 30,
+            "is_enabled": True,
+        },
+        {
+            "name": "Daily Risk Assessment",
+            "description": "Run risk assessment on new articles every 24 hours",
+            "task_type": AutomationTaskType.RISK_ASSESSMENT,
+            "cron_expression": "0 0 * * *",
+            "is_enabled": True,
+        },
+        {
+            "name": "Weekly Intelligence Briefing",
+            "description": "Generate weekly intelligence brief every Friday at 4 PM",
+            "task_type": AutomationTaskType.WEEKLY_BRIEF,
+            "cron_expression": "0 16 * * 5",
+            "is_enabled": True,
+        }
+    ]
+    
+    for schedule_data in schedules:
+        schedule = AutomationSchedule(**schedule_data)
+        db.add(schedule)
+        
+    await db.commit()
+    logger.info("Sample automation schedules created")

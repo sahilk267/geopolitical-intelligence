@@ -12,9 +12,6 @@ import {
   FileText,
   ShieldAlert,
   TrendingUp,
-  Users,
-  IndianRupee,
-  ArrowUpRight,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -33,29 +30,23 @@ import {
 import { getRiskColor } from '@/lib/riskEngine';
 import { getERIColor, classifyERI } from '@/lib/eriEngine';
 
-// Sample data for charts
-const eriHistoryData = [
-  { week: 'W8', score: 45 },
-  { week: 'W9', score: 48 },
-  { week: 'W10', score: 52 },
-  { week: 'W11', score: 55 },
-  { week: 'W12', score: 58 },
-];
-
-const contentPipelineData = [
-  { stage: 'Ingestion', count: 12 },
-  { stage: 'Screening', count: 8 },
-  { stage: 'Research', count: 5 },
-  { stage: 'Risk Scoring', count: 3 },
-  { stage: 'Review', count: 4 },
-  { stage: 'Approved', count: 2 },
-];
-
-
-
 export function Dashboard() {
-  const { contents, currentERI, getDashboardStats, safeModeEnabled, settings } = useAppStore();
+  const { contents, currentERI, eriHistory, getDashboardStats, setCreateDialogOpen, safeModeEnabled, settings } = useAppStore();
   const stats = getDashboardStats();
+
+  const eriHistoryData = eriHistory?.slice(-5).map(eri => ({
+    week: `W${eri.weekNumber}`,
+    score: eri.overallScore
+  })) || [];
+
+  const contentPipelineData = [
+    { stage: 'Ingestion', count: contents.filter(c => c.currentStage === 'ingestion').length },
+    { stage: 'Screening', count: contents.filter(c => c.currentStage === 'preliminary_screening').length },
+    { stage: 'Research', count: contents.filter(c => c.currentStage === 'research_layering').length },
+    { stage: 'Risk scoring', count: contents.filter(c => c.currentStage === 'risk_scoring').length },
+    { stage: 'Review', count: contents.filter(c => c.currentStage === 'editorial_review').length },
+    { stage: 'Approved', count: contents.filter(c => c.currentStage === 'final_approval').length },
+  ];
 
   const pendingApprovals = contents.filter(
     (c) => c.currentStage === 'final_approval' || c.currentStage === 'editorial_review'
@@ -74,7 +65,10 @@ export function Dashboard() {
             <Clock className="w-4 h-4 mr-2" />
             Last 7 Days
           </Button>
-          <Button className="bg-[#C7A84A] hover:bg-[#d4b65c] text-[#0B1F3A] font-medium">
+          <Button
+            className="bg-[#C7A84A] hover:bg-[#d4b65c] text-[#0B1F3A] font-medium"
+            onClick={() => setCreateDialogOpen(true)}
+          >
             <FileText className="w-4 h-4 mr-2" />
             New Content
           </Button>
@@ -119,9 +113,10 @@ export function Dashboard() {
               </div>
             </div>
             <div className="flex items-center gap-1 mt-4 text-xs">
-              <ArrowUpRight className="w-3 h-3 text-red-400" />
-              <span className="text-red-400">+3 points</span>
-              <span className="text-slate-500">from last week</span>
+              <span className="text-slate-500">Stability Index:</span>
+              <span className={currentERI && currentERI.overallScore > 75 ? "text-red-400" : "text-green-400"}>
+                {classifyERI(currentERI?.overallScore || 0)}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -177,30 +172,6 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Revenue Stats */}
-        <Card className="bg-[#0B1F3A]/50 border-slate-700/50">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Monthly Revenue</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <IndianRupee className="w-5 h-5 text-[#C7A84A]" />
-                  <span className="text-3xl font-bold text-white">
-                    {(stats.monthlyRevenue / 100000).toFixed(1)}L
-                  </span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-[#C7A84A]/20 flex items-center justify-center">
-                <IndianRupee className="w-6 h-6 text-[#C7A84A]" />
-              </div>
-            </div>
-            <div className="flex items-center gap-1 mt-4 text-xs">
-              <Users className="w-3 h-3 text-blue-400" />
-              <span className="text-blue-400">{stats.weeklySubscribers.toLocaleString()}</span>
-              <span className="text-slate-500">weekly subscribers</span>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Charts Row */}
@@ -361,22 +332,14 @@ export function Dashboard() {
               <Progress value={settings.riskThreshold} className="h-2" />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-slate-400">Storage Used</span>
-                <span className="text-sm text-white">67%</span>
-              </div>
-              <Progress value={67} className="h-2" />
-            </div>
-
             <div className="pt-4 border-t border-slate-700/50">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Last Backup</span>
-                <span className="text-slate-300">2 hours ago</span>
+                <span className="text-slate-400">Data Sources</span>
+                <span className="text-slate-300">Synchronized</span>
               </div>
               <div className="flex items-center justify-between text-sm mt-2">
-                <span className="text-slate-400">Next Brief</span>
-                <span className="text-slate-300">Friday, 9:00 AM</span>
+                <span className="text-slate-400">Last Update</span>
+                <span className="text-slate-300">Just now</span>
               </div>
             </div>
           </CardContent>
