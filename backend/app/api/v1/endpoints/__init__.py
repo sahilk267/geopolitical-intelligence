@@ -16,6 +16,11 @@ from app.api.v1.endpoints import (
     briefs,
     audit,
     dashboard,
+    reports,
+    audio,
+    settings,
+    pipeline,
+    distribution,
 )
 
 __all__ = [
@@ -33,4 +38,9 @@ __all__ = [
     "briefs",
     "audit",
     "dashboard",
+    "reports",
+    "audio",
+    "settings",
+    "pipeline",
+    "distribution",
 ]

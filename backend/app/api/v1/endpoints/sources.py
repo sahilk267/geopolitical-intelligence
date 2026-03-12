@@ -201,42 +201,36 @@ async def fetch_all_sources(
     current_user: User = Depends(require_role(UserRole.JUNIOR_EDITOR))
 ):
     """Fetch from all enabled sources."""
-    result = await db.execute(select(Source).where(Source.is_enabled == True))
-    sources = result.scalars().all()
+    from app.services.source_service import source_service
+    result = await source_service.fetch_all_enabled(db)
     
-    results = []
-    for source in sources:
-        # Simulate fetch
-        import asyncio
-        import random
-        
-        await asyncio.sleep(0.5)
-        
-        success = random.random() > 0.2
-        items_found = int(random.random() * 20) + 3 if success else 0
-        
-        from datetime import datetime
-        source.last_fetch_at = datetime.utcnow()
-        source.last_fetch_status = "success" if success else "error"
-        source.fetch_count += 1
-        source.items_fetched += items_found
-        if success:
-            source.success_count += 1
+    details = result.get("details", [])
+    total = result.get("total_sources", 0)
+    successful = sum(1 for r in details if r.get("success", False))
+    failed = total - successful
+    
+    formatted_results = []
+    for d in details:
+        source_data = d.get("source", {})
+        if d.get("success"):
+            formatted_results.append({
+                "source_id": str(source_data.get("id", "")),
+                "source_name": source_data.get("name", ""),
+                "success": True,
+                "items_fetched": d.get("items_fetched", 0)
+            })
         else:
-            source.error_count += 1
-        
-        results.append({
-            "source_id": str(source.id),
-            "source_name": source.name,
-            "success": success,
-            "items_fetched": items_found,
-        })
-    
-    await db.commit()
-    
+            formatted_results.append({
+                "source_id": str(source_data.get("id", "")),
+                "source_name": source_data.get("name", ""),
+                "success": False,
+                "items_fetched": 0,
+                "error": d.get("error", "Unknown error")
+            })
+            
     return {
-        "total_sources": len(sources),
-        "successful": sum(1 for r in results if r["success"]),
-        "failed": sum(1 for r in results if not r["success"]),
-        "results": results,
+        "total_sources": total,
+        "successful": successful,
+        "failed": failed,
+        "results": formatted_results
     }

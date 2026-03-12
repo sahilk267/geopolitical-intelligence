@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
@@ -13,6 +11,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
@@ -20,19 +23,11 @@ services:
     restart: always
     ports:
       - "6379:6379"
-
-  neo4j:
-    image: neo4j:5-community
-    container_name: geopol-neo4j
-    restart: always
-    ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
-    environment:
-      NEO4J_AUTH: neo4j/your-neo4j-password
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -42,18 +37,21 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Override .env values for Docker networking
       - POSTGRES_SERVER=db
+      - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=your-postgres-password
       - POSTGRES_DB=geopolitical_intel
-      - REDIS_HOST=redis
-      - NEO4J_URI=bolt://neo4j:7687
-    depends_on:
-      - db
-      - redis
-      - neo4j
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_CORS_ORIGINS=["http://localhost","http://localhost:80","http://localhost:3000","http://localhost:5173","http://frontend:80"]
     env_file:
       - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:
@@ -67,5 +65,3 @@ services:
 
 volumes:
   postgres_data:
-  neo4j_data:
-  neo4j_logs:

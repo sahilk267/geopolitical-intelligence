@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     }
     
     # AI/LLM Integration
+    AI_PROVIDER: str = "gemini"  # "gemini" or "ollama"
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_MODEL: str = "llama3.2"
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     LLM_MODEL: str = "gemini-1.5-pro"
@@ -80,8 +83,26 @@ class Settings(BaseSettings):
     
     # Video Production
     VIDEO_OUTPUT_DIR: str = "./output/videos"
-    TTS_ENGINE: str = "elevenlabs"  # or "azure"
+    TTS_ENGINE: str = "edge_tts"  # "elevenlabs", "edge_tts", "piper", or "gtts"
     ELEVENLABS_API_KEY: Optional[str] = None
+    EDGE_TTS_VOICE: str = "en-US-GuyNeural"
+    PIPER_TTS_MODEL: str = "en_US-lessac-medium"
+    
+    # Avatar / Lip-Sync
+    AVATAR_ENGINE: str = "did"  # "did" or "heygen"
+    DID_API_KEY: Optional[str] = None
+    HEYGEN_API_KEY: Optional[str] = None
+    DEFAULT_PRESENTER_IMAGE: str = "./assets/presenter.png"
+    
+    # Short Clips
+    SHORT_CLIP_DURATION_SECONDS: int = 45
+    SHORT_CLIP_RESOLUTION: str = "1080x1920"
+
+    # Social Distribution
+    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_CHAT_ID: Optional[str] = None
+    YOUTUBE_CLIENT_ID: Optional[str] = None
+    YOUTUBE_CLIENT_SECRET: Optional[str] = None
     
     # Audit & Logging
     AUDIT_LOG_RETENTION_DAYS: int = 365

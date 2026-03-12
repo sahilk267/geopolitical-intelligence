@@ -3,7 +3,7 @@ import json
 import os
 
 api_key = "AIzaSyCCkcMLUuArs5FQSWC9mswyCXvT_v9zf7Y"
-url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
+url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
 data = {
     "contents": [{
         "parts": [{"text": "Is this API key working? Answer in 5 words."}]

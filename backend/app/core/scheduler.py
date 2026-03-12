@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import SessionLocal
+from app.db.base import AsyncSessionLocal
 from app.models.source import Source
 from app.api.v1.endpoints.sources import fetch_from_source
 
@@ -17,7 +17,7 @@ async def poll_sources_task():
     """Periodically check and poll enabled sources and automation schedules."""
     while True:
         try:
-            async with SessionLocal() as db:
+            async with AsyncSessionLocal() as db:
                 # Keep legacy polling for now
                 await poll_active_sources(db)
                 # Process dynamic automation schedules
@@ -71,11 +71,25 @@ async def process_automation_schedules(db: AsyncSession):
             logger.info(f"Executing automation schedule: {schedule.name} (Type: {schedule.task_type})")
             try:
                 if schedule.task_type == AutomationTaskType.CONTENT_FETCH:
-                    category = schedule.task_params.get("category")
+                    category = (schedule.task_params or {}).get("category")
                     if category:
                         await source_service.fetch_by_category(category, db)
                     else:
                         await source_service.fetch_all_enabled(db)
+                
+                elif schedule.task_type == AutomationTaskType.RISK_ASSESSMENT:
+                    logger.info(f"Risk assessment task triggered: {schedule.name}")
+                    # TODO: Implement risk assessment automation in Phase 6
+                
+                elif schedule.task_type == AutomationTaskType.WEEKLY_BRIEF:
+                    logger.info(f"Weekly brief task triggered: {schedule.name}")
+                    # TODO: Implement weekly brief automation in Phase 6
+                
+                elif schedule.task_type == AutomationTaskType.FETCH_SOURCES:
+                    await source_service.fetch_all_enabled(db)
+                
+                else:
+                    logger.warning(f"Unknown automation task type: {schedule.task_type}")
                 
                 schedule.last_run_at = now
                 schedule.run_count += 1
@@ -84,4 +98,7 @@ async def process_automation_schedules(db: AsyncSession):
             except Exception as e:
                 logger.error(f"Failed to execute schedule {schedule.name}: {e}")
                 schedule.failure_count += 1
-                await db.commit()
+                try:
+                    await db.commit()
+                except Exception:
+                    await db.rollback()

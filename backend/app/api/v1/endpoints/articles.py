@@ -56,7 +56,19 @@ async def create_article(
     await db.commit()
     await db.refresh(db_article)
     
-    return db_article.to_dict()
+    # Pre-generate dictionary to avoid lazy loading issues during serialization
+    article_dict = {
+        "id": str(db_article.id),
+        "headline": db_article.headline,
+        "summary": db_article.summary,
+        "category": db_article.category,
+        "region": db_article.region,
+        "status": db_article.status.value,
+        "priority": db_article.priority,
+        "createdAt": db_article.created_at.isoformat() if db_article.created_at else None
+    }
+    
+    return article_dict
 
 
 @router.get("/")

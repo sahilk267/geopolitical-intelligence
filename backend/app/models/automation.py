@@ -14,6 +14,9 @@ from app.db.base import Base
 class AutomationTaskType(str, PyEnum):
     """Types of automated tasks."""
     CONTENT_FETCH = "content_fetch"
+    FETCH_SOURCES = "fetch_sources"
+    RISK_ASSESSMENT = "risk_assessment"
+    WEEKLY_BRIEF = "weekly_brief"
     VIDEO_GENERATION = "video_generation"
     REPORT_GENERATION = "report_generation"
     SYSTEM_MAINTENANCE = "system_maintenance"

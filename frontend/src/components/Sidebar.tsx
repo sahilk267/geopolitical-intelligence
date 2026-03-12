@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Globe,
   Video,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -31,6 +32,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'content', label: 'Content Workflow', icon: FileText },
+  { id: 'factory', label: 'Content Factory', icon: Sparkles },
   { id: 'video', label: 'Video Production', icon: Video },
   { id: 'risk', label: 'Risk Analysis', icon: ShieldAlert },
   { id: 'eri', label: 'ERI Dashboard', icon: TrendingUp },

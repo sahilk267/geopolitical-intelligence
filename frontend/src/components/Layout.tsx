@@ -9,6 +9,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Dashboard } from '@/sections/Dashboard';
 import { ContentWorkflow } from '@/sections/ContentWorkflow';
+import { ContentFactory } from '@/sections/ContentFactory';
 import { RiskAnalysis } from '@/sections/RiskAnalysis';
 import { ERIDashboard } from '@/sections/ERIDashboard';
 import { WeeklyBriefSection } from '@/sections/WeeklyBrief';
@@ -32,6 +33,8 @@ export function Layout() {
         return <Dashboard />;
       case 'content':
         return <ContentWorkflow />;
+      case 'factory':
+        return <ContentFactory />;
       case 'risk':
         return <RiskAnalysis />;
       case 'eri':
@@ -52,6 +55,8 @@ export function Layout() {
         return <Dashboard />;
     }
   };
+
+  console.log('Rendering Layout, activeTab:', activeTab);
 
   return (
     <div className="flex h-screen bg-[#0a0f1a] text-slate-200 overflow-hidden">

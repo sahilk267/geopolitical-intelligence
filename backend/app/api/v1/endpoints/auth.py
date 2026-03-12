@@ -10,13 +10,14 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.db.base import get_db
 from app.models.user import User, UserRole
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
@@ -58,7 +59,9 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User).options(selectinload(User.roles)).where(User.id == user_id)
+    )
     user = result.scalar_one_or_none()
     
     if user is None:
@@ -79,10 +82,10 @@ async def get_current_active_user(
 def require_role(role: UserRole):
     """Dependency to require specific role."""
     async def role_checker(current_user: User = Depends(get_current_active_user)):
-        if not current_user.has_role(role) and not current_user.is_superuser:
+        if not current_user.is_superuser and current_user.primary_role != UserRole.ADMIN and not current_user.has_role(role):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires {role.value} role"
+                detail=f"Requires {role.value} role or Admin privileges"
             )
         return current_user
     return role_checker

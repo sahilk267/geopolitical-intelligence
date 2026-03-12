@@ -170,8 +170,55 @@ const initialSettings: SystemSettings = {
   brandName: 'Strategic Context',
   tagline: 'Context. Evidence. Strategy.',
 };
+const mapArticleToContentItem = (article: any): ContentItem => ({
+  id: article.id,
+  headline: article.headline,
+  summary: article.summary,
+  currentStage: article.status as WorkflowStage,
+  status: article.status as any,
+  priority: (article.priority || 0) as any,
+  region: article.region || 'Global',
+  topic: article.category || 'General',
+  tags: article.tags || [],
+  layers: [],
+  sources: [],
+  createdAt: article.created_at,
+  updatedAt: article.created_at,
+  publishedAt: article.published_at,
+});
 
-
+const initialState: Partial<AppState> = {
+  contents: [] as ContentItem[],
+  currentContent: null,
+  riskAssessments: [] as RiskAssessment[],
+  safeModeEnabled: false,
+  riskThreshold: 40,
+  eriHistory: [] as ERIAssessment[],
+  currentERI: null,
+  weeklyBriefs: [] as WeeklyBrief[],
+  currentBrief: null,
+  evidenceArchive: [] as EvidenceItem[],
+  audienceFeedback: [] as AudienceFeedback[],
+  dataSources: [] as DataSource[],
+  fetchedArticles: [] as FetchedArticle[],
+  systemLogs: [] as SystemLog[],
+  systemHealth: {
+    overall: 'healthy',
+    lastCheck: new Date().toISOString(),
+    services: [],
+  },
+  fetchTestResults: [] as FetchTestResult[],
+  isFetching: false,
+  videoJobs: [] as VideoJob[],
+  videoPipelineStatus: null,
+  automationSchedules: [] as AutomationSchedule[],
+  currentUser: null,
+  users: [] as User[],
+  settings: initialSettings,
+  activeTab: 'dashboard',
+  sidebarOpen: true,
+  createDialogOpen: false,
+};
 
 // --------------------------------------------
 // STORE CREATION
@@ -180,37 +227,7 @@ const initialSettings: SystemSettings = {
 export const useAppStore = create<AppState>()(
   persist(
     (set: any, get: any) => ({
-      // Initial State
-      contents: [],
-      currentContent: null,
-      riskAssessments: [],
-      safeModeEnabled: false,
-      riskThreshold: 40,
-      eriHistory: [],
-      currentERI: null,
-      weeklyBriefs: [],
-      currentBrief: null,
-      evidenceArchive: [],
-      audienceFeedback: [],
-      dataSources: [],
-      fetchedArticles: [],
-      systemLogs: [],
-      systemHealth: {
-        overall: 'healthy',
-        lastCheck: new Date().toISOString(),
-        services: [],
-      },
-      fetchTestResults: [],
-      isFetching: false,
-      videoJobs: [],
-      videoPipelineStatus: null,
-      automationSchedules: [],
-      currentUser: null,
-      users: [],
-      settings: initialSettings,
-      activeTab: 'dashboard',
-      sidebarOpen: true,
-      createDialogOpen: false,
+      ...initialState as any,
 
       // Content Actions
       addContent: async (content: ContentItem) => {
@@ -437,6 +454,12 @@ export const useAppStore = create<AppState>()(
       fetchAllData: async () => {
         set({ isFetching: true });
         try {
+          // Add auto-login for dev environment if token is missing
+          if (!localStorage.getItem('token')) {
+            console.log('No token found, attempting auto-login...');
+            await api.login();
+          }
+
           // Fetch all critical data in parallel
           const [sources, contents, _stats, eri, history, risk, health, videoStatus] = await Promise.all([
             api.getDataSources(),
@@ -451,7 +474,7 @@ export const useAppStore = create<AppState>()(
 
           set({
             dataSources: sources as DataSource[],
-            contents: contents as ContentItem[],
+            contents: (contents as any[]).map(mapArticleToContentItem),
             currentERI: eri as ERIAssessment,
             eriHistory: history as ERIAssessment[],
             riskAssessments: risk as RiskAssessment[],
@@ -509,8 +532,8 @@ export const useAppStore = create<AppState>()(
 
       fetchContents: async () => {
         try {
-          const contents = await api.getContents() as ContentItem[];
-          set({ contents });
+          const contents = await api.getContents() as any[];
+          set({ contents: contents.map(mapArticleToContentItem) });
         } catch (error) {
           console.error('Failed to fetch contents:', error);
         }
@@ -644,6 +667,7 @@ export const useAppStore = create<AppState>()(
       },
 
       setCreateDialogOpen: (open: boolean) => {
+        console.log('Setting createDialogOpen to:', open);
         set({ createDialogOpen: open });
       },
       // Computed
@@ -667,8 +691,6 @@ export const useAppStore = create<AppState>()(
           pendingRiskAssessment: state.contents.filter((c: ContentItem) => c.currentStage === 'risk_scoring').length,
           averageRiskScore: Math.round(riskAverage),
           currentERI: state.currentERI?.overallScore || 0,
-          weeklySubscribers: 0,
-          monthlyRevenue: 0,
         };
       },
 

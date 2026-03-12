@@ -39,6 +39,10 @@ class RawArticle(Base):
     published_at = Column(DateTime)
     author = Column(String(255))
     
+    # Categorization (inherited from source)
+    category = Column(String(100))   # Category from the source
+    region = Column(String(100))     # Region from the source
+    
     # Raw metadata
     raw_metadata = Column(JSONB)  # Original RSS/API response
     raw_content_hash = Column(String(64))  # SHA-256 hash for deduplication

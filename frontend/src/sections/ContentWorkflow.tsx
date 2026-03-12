@@ -63,7 +63,7 @@ export function ContentWorkflow() {
       </div>
 
       {/* Pipeline Overview */}
-      < div className="flex items-center gap-2 overflow-x-auto pb-2" >
+      <div className="flex items-center gap-2 overflow-x-auto pb-2">
         <button
           onClick={() => setSelectedStage('all')}
           className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${selectedStage === 'all'
@@ -88,10 +88,10 @@ export function ContentWorkflow() {
             </button>
           ))
         }
-      </div >
+      </div>
 
       {/* Search and Filter */}
-      < div className="flex items-center gap-4" >
+      <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
@@ -106,10 +106,10 @@ export function ContentWorkflow() {
           <Filter className="w-4 h-4 mr-2" />
           Filter
         </Button>
-      </div >
+      </div>
 
       {/* Content List */}
-      < div className="space-y-3" >
+      <div className="space-y-3">
         {
           filteredContents.length > 0 ? (
             filteredContents.map((content) => (
@@ -127,7 +127,7 @@ export function ContentWorkflow() {
             </div>
           )
         }
-      </div >
+      </div>
     </div >
   );
 }

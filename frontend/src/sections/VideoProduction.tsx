@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
+import { api } from '@/lib/api';
 import {
     Video,
     X,
@@ -15,7 +16,10 @@ import {
     Search,
     MoreVertical,
     Eye,
-    Activity
+    Activity,
+    Share2,
+    Send,
+    Youtube
 } from 'lucide-react';
 import type { VideoJob } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -63,6 +67,43 @@ export function VideoProduction() {
             (job.errorMessage && job.errorMessage.toLowerCase().includes(searchQuery.toLowerCase()));
         return matchesStatus && matchesSearch;
     });
+
+    const handleDistribute = async (jobId: string) => {
+        const AVAILABLE_PLATFORMS = ['telegram', 'youtube', 'facebook', 'instagram', 'twitter', 'linkedin', 'whatsapp'];
+        const platforms = prompt(
+            `Select platforms to distribute to (comma-separated):\n\nAvailable: ${AVAILABLE_PLATFORMS.join(', ')}\n\nOr use the Content Factory section for a better experience.`,
+            'telegram'
+        );
+        if (!platforms) return;
+
+        const platformList = platforms.split(',').map(p => p.trim().toLowerCase()).filter(p => AVAILABLE_PLATFORMS.includes(p));
+        if (platformList.length === 0) {
+            alert('No valid platforms selected.');
+            return;
+        }
+
+        try {
+            const job = videoJobs.find((j: VideoJob) => j.id === jobId);
+            if (!job) {
+                alert('Video job not found.');
+                return;
+            }
+
+            const result = await api.post('/distribution/publish', {
+                content_type: 'video',
+                platforms: platformList,
+                params: {
+                    video_id: jobId,
+                    title: `Intelligence Report: ${jobId.substring(0, 8)}`,
+                    description: "Automated geopolitical intelligence update."
+                }
+            }) as any;
+
+            alert('✅ Distribution triggered! Result: ' + JSON.stringify(result));
+        } catch (err: any) {
+            alert('❌ Distribution failed: ' + (err.message || 'Unknown error'));
+        }
+    };
 
     const getStatusIcon = (status: string) => {
         switch (status) {
@@ -256,11 +297,21 @@ export function VideoProduction() {
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     {job.status === 'completed' && job.outputUrl && (
-                                                        <Button size="icon" variant="ghost" title="View Video" asChild>
-                                                            <a href={job.outputUrl} target="_blank" rel="noopener noreferrer">
-                                                                <Eye className="w-4 h-4 text-blue-400" />
-                                                            </a>
-                                                        </Button>
+                                                        <>
+                                                            <Button size="icon" variant="ghost" title="View Video" asChild>
+                                                                <a href={job.outputUrl} target="_blank" rel="noopener noreferrer">
+                                                                    <Eye className="w-4 h-4 text-blue-400" />
+                                                                </a>
+                                                            </Button>
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                title="Distribute Video"
+                                                                onClick={() => handleDistribute(job.id)}
+                                                            >
+                                                                <Share2 className="w-4 h-4 text-sky-400" />
+                                                            </Button>
+                                                        </>
                                                     )}
                                                     {['queued', 'processing', 'tts_generating', 'avatar_rendering', 'video_compositing'].includes(job.status) && (
                                                         <Button

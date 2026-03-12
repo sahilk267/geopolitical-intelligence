@@ -56,9 +56,15 @@ export function ERIDashboard() {
   });
 
   const handleCreateERI = () => {
+    const now = new Date();
+    // Simple week number calculation
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const pastDaysOfYear = (now.getTime() - startOfYear.getTime()) / 86400000;
+    const weekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+
     const newERI = generateERIAssessment({
-      weekNumber: 13,
-      year: 2026,
+      weekNumber: weekNumber,
+      year: now.getFullYear(),
       dimensionScores,
       keyDevelopments: [
         {
@@ -78,10 +84,10 @@ export function ERIDashboard() {
 
   const radarData = currentERI
     ? currentERI.dimensions.map((d) => ({
-        dimension: d.name,
-        score: d.score,
-        fullMark: 100,
-      }))
+      dimension: d.name,
+      score: d.score,
+      fullMark: 100,
+    }))
     : [];
 
   const historyData = eriHistory
@@ -331,25 +337,23 @@ export function ERIDashboard() {
               {currentERI.scenarioOutlook.map((scenario) => (
                 <div
                   key={scenario.id}
-                  className={`p-4 rounded-lg border ${
-                    scenario.probability === 'high'
+                  className={`p-4 rounded-lg border ${scenario.probability === 'high'
                       ? 'border-red-500/30 bg-red-500/10'
                       : scenario.probability === 'moderate'
-                      ? 'border-amber-500/30 bg-amber-500/10'
-                      : 'border-green-500/30 bg-green-500/10'
-                  }`}
+                        ? 'border-amber-500/30 bg-amber-500/10'
+                        : 'border-green-500/30 bg-green-500/10'
+                    }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-medium text-white">{scenario.name}</h4>
                     <Badge
                       variant="outline"
-                      className={`text-xs capitalize ${
-                        scenario.probability === 'high'
+                      className={`text-xs capitalize ${scenario.probability === 'high'
                           ? 'border-red-500 text-red-400'
                           : scenario.probability === 'moderate'
-                          ? 'border-amber-500 text-amber-400'
-                          : 'border-green-500 text-green-400'
-                      }`}
+                            ? 'border-amber-500 text-amber-400'
+                            : 'border-green-500 text-green-400'
+                        }`}
                     >
                       {scenario.probability} probability
                     </Badge>

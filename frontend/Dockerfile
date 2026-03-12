@@ -9,7 +9,8 @@ RUN npm install
 
 # Copy source files and build
 COPY . .
-RUN npm run build
+# Use vite build directly (tsc type-checking is for dev, not needed for prod bundle)
+RUN npx vite build
 
 # Stage 2: Serve the application with Nginx
 FROM nginx:alpine

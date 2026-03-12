@@ -67,7 +67,10 @@ export function Dashboard() {
           </Button>
           <Button
             className="bg-[#C7A84A] hover:bg-[#d4b65c] text-[#0B1F3A] font-medium"
-            onClick={() => setCreateDialogOpen(true)}
+            onClick={() => {
+              console.log('New Content button clicked');
+              setCreateDialogOpen(true);
+            }}
           >
             <FileText className="w-4 h-4 mr-2" />
             New Content

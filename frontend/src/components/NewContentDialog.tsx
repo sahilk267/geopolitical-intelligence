@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store';
+import { api } from '@/lib/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import type { ContentItem } from '@/types';
 
 export function NewContentDialog() {
     const { createDialogOpen, setCreateDialogOpen, addContent } = useAppStore();
+    console.log('NewContentDialog rendered, open:', createDialogOpen);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,29 +78,17 @@ export function NewContentDialog() {
 
         setIsGenerating(true);
         try {
-            const response = await fetch('/api/v1/articles/generate-from-url', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-                body: JSON.stringify({
-                    url: formData.url,
-                    topic: formData.topic,
-                    region: formData.region,
-                }),
-            });
+            const data = await api.generateFromUrl(
+                formData.url,
+                formData.topic,
+                formData.region
+            ) as { headline: string; summary: string };
 
-            if (response.ok) {
-                const data = await response.json();
-                setFormData((prev: any) => ({
-                    ...prev,
-                    headline: data.headline || prev.headline,
-                    summary: data.summary || prev.summary,
-                }));
-            } else {
-                console.error('Failed to generate content');
-            }
+            setFormData((prev: any) => ({
+                ...prev,
+                headline: data.headline || prev.headline,
+                summary: data.summary || prev.summary,
+            }));
         } catch (error) {
             console.error('AI generation error:', error);
         } finally {
