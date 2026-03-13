@@ -34,14 +34,26 @@ class YouTubeService:
         # Legacy filesystem path (fallback)
         self.token_path = os.path.join(os.path.dirname(settings.VIDEO_OUTPUT_DIR), "youtube_token.json")
 
-    def _get_credentials(self) -> Optional["Credentials"]:
+    def _get_credentials(self, config: Optional[Dict[str, Any]] = None) -> Optional["Credentials"]:
         """
         Load OAuth credentials. Priority:
-        1. Database-stored token (PlatformSetting with key='youtube_oauth_token')
-        2. Legacy filesystem token file
+        1. Config-provided token (from Profile platform_configs)
+        2. Database-stored token (PlatformSetting with key='youtube_oauth_token')
+        3. Legacy filesystem token file
         """
         if not HAS_GOOGLE_LIBS:
             return None
+
+        # 1. Try config-provided token first
+        token_json = (config or {}).get("oauth_token")
+        if token_json:
+            try:
+                creds = Credentials.from_authorized_user_info(json.loads(token_json), self.scopes)
+                if creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                return creds
+            except Exception as e:
+                logger.warning(f"Failed to load YouTube token from provided config: {e}")
 
         # Try database first (synchronous read for credential loading)
         try:
@@ -137,13 +149,14 @@ class YouTubeService:
         title: str,
         description: str = "",
         tags: list = None,
-        thumbnail_path: Optional[str] = None
+        thumbnail_path: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Upload a video to YouTube."""
         if not HAS_GOOGLE_LIBS:
             return {"status": "error", "message": "Google API libraries not installed."}
 
-        creds = self._get_credentials()
+        creds = self._get_credentials(config=config)
         if not creds:
             return {"status": "error", "message": "YouTube not authenticated. Please connect your account in Settings."}
 

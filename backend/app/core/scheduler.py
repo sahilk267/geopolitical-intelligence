@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import AsyncSessionLocal
 from app.models.source import Source
+from app.models.campaign import Campaign
 from app.api.v1.endpoints.sources import fetch_from_source
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,8 @@ async def poll_sources_task():
                 await poll_active_sources(db)
                 # Process dynamic automation schedules
                 await process_automation_schedules(db)
+                # Process autonomous content campaigns
+                await process_campaign_schedules(db)
         except Exception as e:
             logger.error(f"Error in poll_sources_task: {e}")
         
@@ -102,3 +105,54 @@ async def process_automation_schedules(db: AsyncSession):
                     await db.commit()
                 except Exception:
                     await db.rollback()
+
+
+async def process_campaign_schedules(db: AsyncSession):
+    """Dynamically process autonomous content campaigns."""
+    from app.services.pipeline_service import pipeline_service
+    
+    result = await db.execute(
+        select(Campaign).where(Campaign.is_active == True)
+    )
+    campaigns = result.scalars().all()
+    
+    now = datetime.utcnow()
+    
+    for campaign in campaigns:
+        should_run = False
+        if not campaign.last_run_at:
+            should_run = True
+        else:
+            # Simple interval check based on schedule_type
+            interval = timedelta(hours=24) # Default daily
+            if campaign.schedule_type == "hourly":
+                interval = timedelta(hours=1)
+            elif campaign.schedule_type == "6h":
+                interval = timedelta(hours=6)
+            elif campaign.schedule_type == "12h":
+                interval = timedelta(hours=12)
+            
+            if (now - campaign.last_run_at) >= interval:
+                should_run = True
+                
+        if should_run:
+            logger.info(f"Campaign Triggered: {campaign.name} (Profile: {campaign.profile_id})")
+            try:
+                # Process each category in the campaign
+                categories = campaign.categories or ["General"]
+                for cat in categories:
+                    logger.info(f"Running autonomous pipeline for Campaign {campaign.name}: Category={cat}")
+                    await pipeline_service.run_full_pipeline(
+                        db=db,
+                        category=cat,
+                        profile_id=campaign.profile_id,
+                        generate_short=True,
+                        generate_presenter=False, # Focus on rapid short clips for autonomous mode
+                    )
+                
+                campaign.last_run_at = now
+                await db.commit()
+                logger.info(f"Campaign {campaign.name} completed successfully.")
+            except Exception as e:
+                logger.error(f"Failed to execute Campaign {campaign.name}: {e}")
+                await db.rollback()

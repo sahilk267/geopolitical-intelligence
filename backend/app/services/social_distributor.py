@@ -30,11 +30,24 @@ class SocialDistributor:
         except ImportError as e:
             logger.warning(f"YouTube service not available: {e}")
 
+        try:
+            from app.services.platforms.twitter_service import twitter_service
+            self.platforms["twitter"] = twitter_service
+        except ImportError as e:
+            logger.warning(f"Twitter service not available: {e}")
+
+        try:
+            from app.services.platforms.discord_service import discord_service
+            self.platforms["discord"] = discord_service
+        except ImportError as e:
+            logger.warning(f"Discord service not available: {e}")
+
     async def distribute(
         self, 
         content_type: str, 
         platforms: List[str], 
-        params: Dict[str, Any]
+        params: Dict[str, Any],
+        profile_configs: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Distribute content to selected platforms.
@@ -43,6 +56,7 @@ class SocialDistributor:
             content_type: "video", "report", or "summary"
             platforms: List of platform keys (e.g., ["telegram", "youtube"])
             params: Dictionary containing media paths, titles, descriptions, etc.
+            profile_configs: Optional platform-specific credentials from a Profile
         """
         results = {}
         
@@ -52,6 +66,8 @@ class SocialDistributor:
                 continue
             
             platform_service = self.platforms[platform_key]
+            # Get specific config for this platform from the profile
+            platform_config = (profile_configs or {}).get(platform_key, {})
             
             try:
                 logger.info(f"Distributing {content_type} to {platform_key}...")
@@ -61,12 +77,14 @@ class SocialDistributor:
                         video_path=params.get("video_path"),
                         title=params.get("title", ""),
                         description=params.get("description", ""),
-                        thumbnail_path=params.get("thumbnail_path")
+                        thumbnail_path=params.get("thumbnail_path"),
+                        config=platform_config
                     )
                 elif content_type == "report":
                     res = await platform_service.post_text(
                         text=params.get("text", ""),
-                        title=params.get("title", "")
+                        title=params.get("title", ""),
+                        config=platform_config
                     )
                 else:
                     results[platform_key] = {"status": "error", "message": f"Content type '{content_type}' not supported"}

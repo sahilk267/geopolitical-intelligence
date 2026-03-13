@@ -388,6 +388,38 @@ export interface SystemHealth {
   }[];
 }
 
+// --------------------------------------------
+// AUTOMATION & CAMPAIGN TYPES
+// --------------------------------------------
+
+export interface Profile {
+  id: string;
+  name: string;
+  description?: string;
+  voiceEngine: string;
+  voiceId?: string;
+  videoStyle: Record<string, any>;
+  platformConfigs: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  description?: string;
+  profileId: string;
+  categories: string[];
+  regions: string[];
+  isActive: boolean;
+  scheduleType: string;
+  scheduleConfig: Record<string, any>;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface FetchTestResult {
   sourceId: string;
   timestamp: string;

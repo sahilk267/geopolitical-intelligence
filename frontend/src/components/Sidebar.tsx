@@ -19,6 +19,8 @@ import {
   Globe,
   Video,
   Sparkles,
+  UserSquare,
+  Target,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -33,6 +35,8 @@ const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'content', label: 'Content Workflow', icon: FileText },
   { id: 'factory', label: 'Content Factory', icon: Sparkles },
+  { id: 'profiles', label: 'Personas', icon: UserSquare },
+  { id: 'campaigns', label: 'Campaigns', icon: Target },
   { id: 'video', label: 'Video Production', icon: Video },
   { id: 'risk', label: 'Risk Analysis', icon: ShieldAlert },
   { id: 'eri', label: 'ERI Dashboard', icon: TrendingUp },

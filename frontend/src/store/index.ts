@@ -73,6 +73,10 @@ interface AppState {
   currentUser: User | null;
   users: User[];
 
+  // Profiles & Campaigns
+  profiles: any[];
+  campaigns: any[];
+
   // Settings
   settings: SystemSettings;
 
@@ -152,6 +156,20 @@ interface AppState {
   updateAutomationSchedule: (id: string, data: any) => Promise<void>;
   deleteAutomationSchedule: (id: string) => Promise<void>;
   runAutomationScheduleNow: (id: string) => Promise<void>;
+
+  // Profile Actions
+  fetchProfiles: () => Promise<void>;
+  createProfile: (data: any) => Promise<void>;
+  updateProfile: (id: string, data: any) => Promise<void>;
+  deleteProfile: (id: string) => Promise<void>;
+
+  // Campaign Actions
+  fetchCampaigns: () => Promise<void>;
+  createCampaign: (data: any) => Promise<void>;
+  updateCampaign: (id: string, data: any) => Promise<void>;
+  deleteCampaign: (id: string) => Promise<void>;
+  triggerCampaign: (id: string) => Promise<void>;
+
   resetState: () => void;
 }
 
@@ -212,6 +230,8 @@ const initialState: Partial<AppState> = {
   videoJobs: [] as VideoJob[],
   videoPipelineStatus: null,
   automationSchedules: [] as AutomationSchedule[],
+  profiles: [],
+  campaigns: [],
   currentUser: null,
   users: [] as User[],
   settings: initialSettings,
@@ -461,7 +481,7 @@ export const useAppStore = create<AppState>()(
           }
 
           // Fetch all critical data in parallel
-          const [sources, contents, _stats, eri, history, risk, health, videoStatus] = await Promise.all([
+          const [sources, contents, _stats, eri, history, risk, health, videoStatus, profiles, campaigns] = await Promise.all([
             api.getDataSources(),
             api.getContents(),
             api.getDashboardStats(),
@@ -469,9 +489,11 @@ export const useAppStore = create<AppState>()(
             api.getERIAssessments(),
             api.getRiskAssessments(),
             api.getSystemHealth(),
-            api.getVideoPipelineStatus()
+            api.getVideoPipelineStatus(),
+            api.getProfiles(),
+            api.getCampaigns()
           ]);
-
+ 
           set({
             dataSources: sources as DataSource[],
             contents: (contents as any[]).map(mapArticleToContentItem),
@@ -481,6 +503,8 @@ export const useAppStore = create<AppState>()(
             systemHealth: health as SystemHealth,
             videoPipelineStatus: videoStatus as VideoPipelineStatus,
             automationSchedules: await api.getAutomationSchedules() as AutomationSchedule[],
+            profiles: profiles as any[],
+            campaigns: campaigns as any[],
             isFetching: false
           });
         } catch (error) {
@@ -618,6 +642,82 @@ export const useAppStore = create<AppState>()(
           get().fetchAutomationSchedules();
         } catch (error) {
           console.error('Failed to run schedule:', error);
+        }
+      },
+
+      // Profile Actions
+      fetchProfiles: async () => {
+        try {
+          const profiles = await api.getProfiles();
+          set({ profiles: profiles as any[] });
+        } catch (error) {
+          console.error('Failed to fetch profiles:', error);
+        }
+      },
+      createProfile: async (data: any) => {
+        try {
+          await api.createProfile(data);
+          get().fetchProfiles();
+        } catch (error) {
+          console.error('Failed to create profile:', error);
+        }
+      },
+      updateProfile: async (id: string, data: any) => {
+        try {
+          await api.updateProfile(id, data);
+          get().fetchProfiles();
+        } catch (error) {
+          console.error('Failed to update profile:', error);
+        }
+      },
+      deleteProfile: async (id: string) => {
+        try {
+          await api.deleteProfile(id);
+          get().fetchProfiles();
+        } catch (error) {
+          console.error('Failed to delete profile:', error);
+        }
+      },
+
+      // Campaign Actions
+      fetchCampaigns: async () => {
+        try {
+          const campaigns = await api.getCampaigns();
+          set({ campaigns: campaigns as any[] });
+        } catch (error) {
+          console.error('Failed to fetch campaigns:', error);
+        }
+      },
+      createCampaign: async (data: any) => {
+        try {
+          await api.createCampaign(data);
+          get().fetchCampaigns();
+        } catch (error) {
+          console.error('Failed to create campaign:', error);
+        }
+      },
+      updateCampaign: async (id: string, data: any) => {
+        try {
+          await api.updateCampaign(id, data);
+          get().fetchCampaigns();
+        } catch (error) {
+          console.error('Failed to update campaign:', error);
+        }
+      },
+      deleteCampaign: async (id: string) => {
+        try {
+          await api.deleteCampaign(id);
+          get().fetchCampaigns();
+        } catch (error) {
+          console.error('Failed to delete campaign:', error);
+        }
+      },
+      triggerCampaign: async (id: string) => {
+        try {
+          await api.triggerCampaign(id);
+          get().fetchCampaigns();
+        } catch (error) {
+          console.error('Failed to trigger campaign:', error);
         }
       },
 

@@ -44,6 +44,7 @@ class VideoRenderService:
         background_color: str = "#1a1a2e",
         text_color: str = "white",
         music_path: Optional[str] = None,
+        profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Render a high-quality short clip with:
@@ -56,6 +57,11 @@ class VideoRenderService:
 
         filename = f"short_{uuid.uuid4().hex[:12]}.mp4"
         output_path = os.path.join(self.short_clip_dir, filename)
+
+        # 0. Profile Style Overrides
+        style = profile.get("video_style", {}) if profile else {}
+        bg_color = style.get("backgroundColor", background_color)
+        txt_color = style.get("textColor", text_color)
 
         # 1. Calculate timing
         duration = self._get_media_duration(audio_path)
@@ -82,11 +88,11 @@ class VideoRenderService:
             video_filters.append(f"{concat_filter}concat=n={len(image_paths)}:v=1:a=0[bgv];")
         else:
             # Fallback to solid color
-            inputs.extend(["-f", "lavfi", "-i", f"color=c={background_color}:s=1080x1920:d={duration}:r=30"])
+            inputs.extend(["-f", "lavfi", "-i", f"color=c={bg_color}:s=1080x1920:d={duration}:r=30"])
             video_filters.append("[0:v]null[bgv];")
 
         # 3. Dynamic Captions (Timed text blocks)
-        caption_filter_inner = self._create_caption_filter(script_text or headline, duration, text_color)
+        caption_filter_inner = self._create_caption_filter(script_text or headline, duration, txt_color)
         if caption_filter_inner:
             full_video_filter = "".join(video_filters) + f"[bgv]{caption_filter_inner}[out_v];"
         else:

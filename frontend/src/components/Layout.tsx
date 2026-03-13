@@ -16,6 +16,8 @@ import { WeeklyBriefSection } from '@/sections/WeeklyBrief';
 import { EvidenceArchive } from '@/sections/EvidenceArchive';
 import { AudienceIntelligence } from '@/sections/AudienceIntelligence';
 import { VideoProduction } from '@/sections/VideoProduction';
+import { ProfileManagement } from '@/sections/ProfileManagement';
+import { CampaignControl } from '@/sections/CampaignControl';
 import { SystemMonitor } from '@/sections/SystemMonitor';
 import { Settings } from '@/sections/Settings';
 import { NewContentDialog } from './NewContentDialog';
@@ -41,6 +43,10 @@ export function Layout() {
         return <ERIDashboard />;
       case 'briefs':
         return <WeeklyBriefSection />;
+      case 'profiles':
+        return <ProfileManagement />;
+      case 'campaigns':
+        return <CampaignControl />;
       case 'evidence':
         return <EvidenceArchive />;
       case 'audience':

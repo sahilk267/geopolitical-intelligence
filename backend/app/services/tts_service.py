@@ -36,21 +36,25 @@ class TTSService:
         text: str,
         voice_id: str = "default",
         filename: Optional[str] = None,
+        profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Generate audio from text using the configured engine.
-        Returns: { "path": str, "url": str, "duration_seconds": float, "file_size": int, "engine": str }
+        Generate audio from text. Supports overrides from a Profile persona.
         """
         if not filename:
             filename = f"{uuid.uuid4().hex}.mp3"
         output_path = os.path.join(self.output_dir, filename)
 
-        # Engine priority: user-selected → fallback chain
-        if self.engine == "elevenlabs" and self.api_key:
-            return await self._elevenlabs_generate(text, voice_id, output_path)
-        elif self.engine == "edge_tts":
-            return await self._edge_tts_generate(text, voice_id, output_path)
-        elif self.engine == "piper":
+        # Profile Overrides
+        engine = profile.get("voice_engine", self.engine) if profile else self.engine
+        voice = profile.get("voice_id", voice_id) if profile else voice_id
+
+        # Engine priority
+        if engine == "elevenlabs" and self.api_key:
+            return await self._elevenlabs_generate(text, voice, output_path)
+        elif engine == "edge_tts":
+            return await self._edge_tts_generate(text, voice, output_path)
+        elif engine == "piper":
             return await self._piper_tts_generate(text, output_path)
         else:
             return await self._gtts_fallback(text, output_path)
@@ -243,7 +247,7 @@ class TTSService:
             return 0.0
 
     async def generate_segment_audios(
-        self, segments: list, voice_id: str = "default"
+        self, segments: list, voice_id: str = "default", profile: Optional[Dict[str, Any]] = None
     ) -> list:
         """Generate audio for each script segment."""
         results = []
@@ -252,7 +256,7 @@ class TTSService:
             if not content:
                 continue
             filename = f"segment_{i}_{uuid.uuid4().hex[:8]}.mp3"
-            result = await self.generate_audio(content, voice_id, filename)
+            result = await self.generate_audio(content, voice_id, filename, profile=profile)
             result["segment_index"] = i
             result["segment_type"] = segment.get("type", "unknown")
             results.append(result)

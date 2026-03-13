@@ -19,9 +19,13 @@ class TelegramService:
         self.chat_id = getattr(settings, "TELEGRAM_CHAT_ID", None)
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
 
-    async def post_text(self, text: str, title: str = "") -> Dict[str, Any]:
+    async def post_text(self, text: str, title: str = "", config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Post a text report to Telegram."""
-        if not self.api_url or not self.chat_id:
+        token = (config or {}).get("bot_token") or self.bot_token
+        chat_id = (config or {}).get("chat_id") or self.chat_id
+        api_url = f"https://api.telegram.org/bot{token}" if token else None
+
+        if not api_url or not chat_id:
             return {"status": "error", "message": "Telegram not configured (token or chat_id missing)"}
 
         message = f"<b>{title}</b>\n\n{text}" if title else text
@@ -30,9 +34,9 @@ class TelegramService:
         if len(message) > 4000:
             message = message[:4000] + "..."
 
-        url = f"{self.api_url}/sendMessage"
+        url = f"{api_url}/sendMessage"
         payload = {
-            "chat_id": self.chat_id,
+            "chat_id": chat_id,
             "text": message,
             "parse_mode": "HTML"
         }
@@ -54,16 +58,21 @@ class TelegramService:
         video_path: str, 
         title: str = "", 
         description: str = "",
-        thumbnail_path: Optional[str] = None
+        thumbnail_path: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Post a video file to Telegram."""
-        if not self.api_url or not self.chat_id:
+        token = (config or {}).get("bot_token") or self.bot_token
+        chat_id = (config or {}).get("chat_id") or self.chat_id
+        api_url = f"https://api.telegram.org/bot{token}" if token else None
+
+        if not api_url or not chat_id:
             return {"status": "error", "message": "Telegram not configured"}
 
         if not os.path.exists(video_path):
             return {"status": "error", "message": f"Video file not found: {video_path}"}
 
-        url = f"{self.api_url}/sendVideo"
+        url = f"{api_url}/sendVideo"
         caption = f"<b>{title}</b>\n\n{description}" if title else description
         
         # Telegram has a 1024 char limit for captions
@@ -79,7 +88,7 @@ class TelegramService:
                 files["thumb"] = (os.path.basename(thumbnail_path), open(thumbnail_path, "rb"), "image/jpeg")
                 
             data = {
-                "chat_id": self.chat_id,
+                "chat_id": chat_id,
                 "caption": caption,
                 "parse_mode": "HTML"
             }

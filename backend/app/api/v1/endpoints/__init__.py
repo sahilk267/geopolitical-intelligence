@@ -21,6 +21,8 @@ from app.api.v1.endpoints import (
     settings,
     pipeline,
     distribution,
+    profiles,
+    campaigns,
 )
 
 __all__ = [
@@ -43,4 +45,6 @@ __all__ = [
     "settings",
     "pipeline",
     "distribution",
+    "profiles",
+    "campaigns",
 ]

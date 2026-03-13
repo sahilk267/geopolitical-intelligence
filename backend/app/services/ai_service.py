@@ -12,6 +12,13 @@ from bs4 import BeautifulSoup
 import re
 import json
 
+# RAG (Persona Memory)
+try:
+    from app.services.rag_service import rag_service
+    _rag_available = True
+except ImportError:
+    _rag_available = False
+
 logger = structlog.get_logger()
 
 
@@ -25,6 +32,19 @@ class AIService:
             self.model = genai.GenerativeModel(settings.LLM_MODEL)
         else:
             self.model = None
+
+    async def _gemini_generate(self, prompt: str) -> str:
+        """Async wrapper for Gemini generation."""
+        if not self.model:
+            return "Gemini API key not configured."
+        # generate_content is synchronous in the current SDK, wrapping in thread if needed
+        # but for now we'll call it directly as it's usually fast enough for low concurrency
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            logger.error(f"Gemini generation failed: {e}")
+            raise e
 
     async def _ollama_generate(self, prompt: str, json_format: bool = False) -> str:
         """Call Ollama generation API."""
@@ -124,12 +144,33 @@ Provide a clear, analytical summary:"""
         self,
         articles: List[Dict[str, Any]],
         category: str,
-        region: str = "Global"
+        region: str = "Global",
+        profile: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate a journalist-quality intelligence report from multiple articles.
-        Mimics the style of a top-tier geopolitical analyst/journalist.
+        Mimics the style of a top-tier geopolitical analyst/journalist or a specific persona.
         """
+        # Build persona context
+        persona_context = ""
+        if profile:
+            persona_context = f"Write this in the style of '{profile.get('name')}': {profile.get('description', '')}"
+        else:
+            persona_context = "You are a senior geopolitical intelligence analyst writing for a top-tier publication."
+
+        # RAG: Recall relevant past analyses for this persona
+        memory_context = ""
+        profile_id = profile.get("id", "") if profile else ""
+        if _rag_available and profile_id:
+            try:
+                query = f"{category} {region} geopolitical analysis"
+                memories = await rag_service.recall(str(profile_id), query, top_k=3)
+                if memories:
+                    memory_snippets = [m["text"] for m in memories]
+                    memory_context = "\n\nYOUR PAST ANALYSES (use these for deeper insight and continuity):\n" + "\n---\n".join(memory_snippets)
+            except Exception as e:
+                logger.warning(f"RAG recall failed: {e}")
+
         # Build article summaries for the prompt
         article_texts = []
         for i, art in enumerate(articles[:10], 1):
@@ -139,7 +180,7 @@ Provide a clear, analytical summary:"""
         
         articles_block = "\n\n".join(article_texts)
         
-        prompt = f"""You are a senior geopolitical intelligence analyst writing for a top-tier publication.
+        prompt = f"""{persona_context}{memory_context}
 Analyze the following {len(articles)} articles about {category} (Region: {region}) and produce a structured intelligence report.
 
 ARTICLES:
@@ -162,14 +203,8 @@ Return ONLY valid JSON, no markdown fences or extra text."""
             if settings.AI_PROVIDER == "ollama":
                 text = await self._ollama_generate(prompt, json_format=True)
             else:
-                if not self.model:
-                    return {"error": "AI features disabled (API key missing)."}
-                response = self.model.generate_content(prompt)
-                try:
-                    text = response.text.strip()
-                except Exception as res_err:
-                    logger.error(f"Failed to get text from Gemini response: {res_err}")
-                    return {"error": f"AI Response Blocked: {str(res_err)}"}
+                text = await self._gemini_generate(prompt)
+                text = text.strip()
             
             if not text:
                 return {"error": "AI provider returned empty response"}
@@ -181,10 +216,9 @@ Return ONLY valid JSON, no markdown fences or extra text."""
             
             try:
                 report = json.loads(text)
-                return report
             except json.JSONDecodeError as jde:
                 logger.warning(f"JSON decode failed for {settings.AI_PROVIDER}")
-                return {
+                report = {
                     "headline": f"{category} Intelligence Report",
                     "executive_summary": text,
                     "key_developments": [],
@@ -193,6 +227,21 @@ Return ONLY valid JSON, no markdown fences or extra text."""
                     "risk_level": "MODERATE",
                     "tags": [category, region],
                 }
+
+            # RAG: Store the generated report in persona memory
+            if _rag_available and profile_id:
+                try:
+                    summary = report.get("executive_summary", "")
+                    analysis = report.get("analysis", "")
+                    memory_text = f"{report.get('headline', '')}\n{summary}\n{analysis}"
+                    await rag_service.store_memory(
+                        str(profile_id), memory_text,
+                        metadata={"category": category, "region": region}
+                    )
+                except Exception as e:
+                    logger.warning(f"RAG store failed: {e}")
+
+            return report
             
         except Exception as e:
             logger.error(f"Error in generate_journalist_report: {str(e)}")
@@ -202,10 +251,11 @@ Return ONLY valid JSON, no markdown fences or extra text."""
     # SHORT SUMMARY (30-second narration for clips)
     # ──────────────────────────────────────────────
 
-    async def generate_short_summary(self, headline: str, content: str) -> Dict[str, str]:
+    async def generate_short_summary(self, headline: str, content: str, profile: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         """Generate a 30-second narration script for short clips."""
+        persona_style = profile.get("name", "Broadcast News Writer") if profile else "Broadcast News Writer"
         content_text = (content or "")[:2000]
-        prompt = f"""You are a broadcast news writer. Create a 30-second narration script (approximately 75 words) for a short video clip.
+        prompt = f"""You are a {persona_style}. Create a 30-second narration script (approximately 75 words) for a short video clip.
 The script should be punchy, engaging, and authoritative.
 
 Topic: {headline}
@@ -215,10 +265,8 @@ Content: {content_text}
             if settings.AI_PROVIDER == "ollama":
                 text = await self._ollama_generate(prompt, json_format=True)
             else:
-                if not self.model:
-                    return {"error": "AI features disabled (API key missing)."}
-                response = self.model.generate_content(prompt)
-                text = response.text.strip()
+                text = await self._gemini_generate(prompt)
+                text = text.strip()
                 
             if text.startswith("```"):
                 text = re.sub(r'^```(?:json)?\s*', '', text)
@@ -232,13 +280,14 @@ Content: {content_text}
     # FULL VIDEO SCRIPT (Presenter narration)
     # ──────────────────────────────────────────────
 
-    async def generate_script(self, article_data: Dict[str, Any], layers: List[str]) -> Dict[str, Any]:
+    async def generate_script(self, article_data: Dict[str, Any], layers: List[str], profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate a structured video script from article data with proper segments."""
+        persona_name = profile.get("name", "geopolitical news channel") if profile else "geopolitical news channel"
         headline = article_data.get('headline', article_data.get('title', 'News Report'))
         content = article_data.get('content', article_data.get('summary', ''))[:5000]
         layers_str = ', '.join(layers) if layers else 'narration'
         
-        prompt = f"""You are a professional video script writer for a geopolitical news channel.
+        prompt = f"""You are a professional video script writer for a {persona_name}.
 Create a structured video script for a presenter-style news segment.
 
 Headline: {headline}
@@ -278,10 +327,8 @@ Return ONLY valid JSON."""
             if settings.AI_PROVIDER == "ollama":
                 text = await self._ollama_generate(prompt, json_format=True)
             else:
-                if not self.model:
-                    return {"error": "AI Script Generation is currently disabled (API key missing)."}
-                response = self.model.generate_content(prompt)
-                text = response.text.strip()
+                text = await self._gemini_generate(prompt)
+                text = text.strip()
             
             # Clean potential markdown code fences
             if text.startswith("```"):
@@ -326,14 +373,16 @@ Return ONLY valid JSON."""
         Generate 3-5 visual image prompts based on a news report.
         """
         prompt = f"""
-        Analyze the following news report and create 3 distinct visual image prompts that could be used as B-roll or background images for a video.
-        The prompts should be descriptive, cinematic, and relevant to the geopolitical theme.
-        Avoid text in the images. Focus on scenery, technology, or symbolic representations.
+        Analyze the following news report and create 3 distinct visual image prompts for cinematic B-roll.
+        Style requirements: Cinematic, hyper-realistic, 8k resolution, dramatic lighting, news photography style.
+        The prompts should be highly descriptive and relevant to the geopolitical theme.
+        Avoid text, people's faces (keep them symbolic or silhouetted), and logos.
+        Focus on: Architecture, technology, military assets, maps, urban landscapes, or symbolic objects.
         
         Report: {report_text[:2000]}
         
         Respond with ONLY a JSON list of strings.
-        Example: ["A futuristic server room with blue glowing lights", "A high-altitude drone flying over a desert", "A digital map of the world with glowing connections"]
+        Example: ["Cinematic wide shot of a high-tech server room with pulsating blue fiber optic cables, dramatic shadows, 8k", "Close-up of a drone flying over a vast, arid desert landscape under a setting sun, realistic, high-detail", "A glowing digital holographic world map with intricate data connections between major cities, dark background, cinematic"]
         """
 
         try:
@@ -353,11 +402,41 @@ Return ONLY valid JSON."""
 
     async def generate_image(self, prompt: str, output_path: str) -> Optional[str]:
         """
-        Fetch an image from a free API (Pollinations.ai) based on a prompt.
+        Fetch an image. Priority:
+        1. Local Stable Diffusion API (SD.Next / A1111) if configured
+        2. Free Cloud API (Pollinations.ai) as fallback
         """
         import httpx
         from urllib.parse import quote
         
+        # 1. Try Local Stable Diffusion (DirectML/CUDA)
+        if settings.STABLE_DIFFUSION_URL:
+            sd_api_url = f"{settings.STABLE_DIFFUSION_URL.rstrip('/')}/sdapi/v1/txt2img"
+            payload = {
+                "prompt": prompt,
+                "negative_prompt": "text, logo, watermark, blurry, low quality, distorted",
+                "steps": 20,
+                "width": 1024,
+                "height": 1024,
+                "cfg_scale": 7,
+                "sampler_name": "Euler a"
+            }
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(sd_api_url, json=payload)
+                    if response.status_code == 200:
+                        import base64
+                        data = response.json()
+                        if "images" in data and len(data["images"]) > 0:
+                            image_data = base64.b64decode(data["images"][0])
+                            with open(output_path, "wb") as f:
+                                f.write(image_data)
+                            logger.info(f"Generated local image via DirectML SD for: {prompt[:50]}...")
+                            return output_path
+            except Exception as e:
+                logger.debug(f"Local Stable Diffusion failed, falling back to cloud: {e}")
+
+        # 2. Fallback to Pollinations.ai (Free Cloud)
         encoded_prompt = quote(prompt)
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
         
@@ -367,10 +446,11 @@ Return ONLY valid JSON."""
                 if response.status_code == 200:
                     with open(output_path, "wb") as f:
                         f.write(response.content)
+                    logger.info(f"Generated cloud image via Pollinations.ai for: {prompt[:50]}...")
                     return output_path
             return None
         except Exception as e:
-            logger.error(f"Image generation failed for '{prompt}': {e}")
+            logger.error(f"Cloud image generation failed for '{prompt}': {e}")
             return None
 
 

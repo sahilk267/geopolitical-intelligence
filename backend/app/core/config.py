@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "gemini"  # "gemini" or "ollama"
     OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "llama3.2"
+    STABLE_DIFFUSION_URL: Optional[str] = "http://host.docker.internal:7860" # Local SD API
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     LLM_MODEL: str = "gemini-1.5-pro"
@@ -89,7 +90,8 @@ class Settings(BaseSettings):
     PIPER_TTS_MODEL: str = "en_US-lessac-medium"
     
     # Avatar / Lip-Sync
-    AVATAR_ENGINE: str = "did"  # "did" or "heygen"
+    AVATAR_ENGINE: str = "local"  # "local" (SadTalker), "did", or "heygen"
+    SADTALKER_DIR: str = "../sadtalker"  # Path to SadTalker installation
     DID_API_KEY: Optional[str] = None
     HEYGEN_API_KEY: Optional[str] = None
     DEFAULT_PRESENTER_IMAGE: str = "./assets/presenter.png"
@@ -103,6 +105,14 @@ class Settings(BaseSettings):
     TELEGRAM_CHAT_ID: Optional[str] = None
     YOUTUBE_CLIENT_ID: Optional[str] = None
     YOUTUBE_CLIENT_SECRET: Optional[str] = None
+    TWITTER_API_KEY: Optional[str] = None
+    TWITTER_API_SECRET: Optional[str] = None
+    TWITTER_ACCESS_TOKEN: Optional[str] = None
+    TWITTER_ACCESS_SECRET: Optional[str] = None
+    DISCORD_WEBHOOK_URL: Optional[str] = None
+    
+    # RAG Memory (ChromaDB)
+    CHROMADB_DIR: str = "./data/chromadb"
     
     # Audit & Logging
     AUDIT_LOG_RETENTION_DAYS: int = 365
