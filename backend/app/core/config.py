@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     }
     
     # AI/LLM Integration
-    AI_PROVIDER: str = "gemini"  # "gemini" or "ollama"
+    AI_PROVIDER: str = "ollama" 
     OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
     OLLAMA_MODEL: str = "llama3.2"
     STABLE_DIFFUSION_URL: Optional[str] = "http://host.docker.internal:7860" # Local SD API

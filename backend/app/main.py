@@ -62,6 +62,8 @@ async def lifespan(app: FastAPI):
                 app_settings.AI_PROVIDER = setting.value
             elif setting.key == "ollama_base_url":
                 app_settings.OLLAMA_BASE_URL = setting.value
+            elif setting.key == "ollama_model":
+                app_settings.OLLAMA_MODEL = setting.value
             elif setting.key == "elevenlabs_api_key":
                 app_settings.ELEVENLABS_API_KEY = setting.value
             elif setting.key == "did_api_key":

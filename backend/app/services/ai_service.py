@@ -60,6 +60,7 @@ class AIService:
         if json_format:
             payload["format"] = "json"
             
+        logger.info(f"DEBUG: Calling Ollama at {url} with model {payload['model']}")
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
                 response = await client.post(url, json=payload)
