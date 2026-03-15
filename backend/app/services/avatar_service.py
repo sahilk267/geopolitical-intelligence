@@ -124,6 +124,7 @@ class AvatarService:
             "--preprocess", "crop",
             "--still",
             "--cpu",  # Use CPU for Intel Iris Xe compatibility
+            "--batch_size", "1",  # Optimize memory for long narrations
         ]
 
         logger.info(f"SadTalker: starting local generation...")

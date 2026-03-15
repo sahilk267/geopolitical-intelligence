@@ -21,6 +21,7 @@ import {
   Sparkles,
   UserSquare,
   Target,
+  LineChart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { id: 'evidence', label: 'Evidence Archive', icon: Archive },
   { id: 'audience', label: 'Audience Intel', icon: Users },
   { id: 'monitor', label: 'System Monitor', icon: Activity },
+  { id: 'analytics', label: 'AI Analytics', icon: LineChart },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 

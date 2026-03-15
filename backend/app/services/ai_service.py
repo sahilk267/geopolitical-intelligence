@@ -409,8 +409,9 @@ Return ONLY valid JSON."""
         import httpx
         from urllib.parse import quote
         
-        # 1. Try Local Stable Diffusion (DirectML/CUDA)
+        # 1. Try Local Stable Diffusion (DirectML/CUDA) with Retry Logic
         if settings.STABLE_DIFFUSION_URL:
+            import asyncio
             sd_api_url = f"{settings.STABLE_DIFFUSION_URL.rstrip('/')}/sdapi/v1/txt2img"
             payload = {
                 "prompt": prompt,
@@ -421,20 +422,28 @@ Return ONLY valid JSON."""
                 "cfg_scale": 7,
                 "sampler_name": "Euler a"
             }
-            try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(sd_api_url, json=payload)
-                    if response.status_code == 200:
-                        import base64
-                        data = response.json()
-                        if "images" in data and len(data["images"]) > 0:
-                            image_data = base64.b64decode(data["images"][0])
-                            with open(output_path, "wb") as f:
-                                f.write(image_data)
-                            logger.info(f"Generated local image via DirectML SD for: {prompt[:50]}...")
-                            return output_path
-            except Exception as e:
-                logger.debug(f"Local Stable Diffusion failed, falling back to cloud: {e}")
+            
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        response = await client.post(sd_api_url, json=payload)
+                        if response.status_code == 200:
+                            import base64
+                            data = response.json()
+                            if "images" in data and len(data["images"]) > 0:
+                                image_data = base64.b64decode(data["images"][0])
+                                with open(output_path, "wb") as f:
+                                    f.write(image_data)
+                                logger.info(f"Generated local image via DirectML SD for: {prompt[:50]}...")
+                                return output_path
+                        else:
+                            logger.warning(f"SD.Next returned status {response.status_code} on attempt {attempt+1}")
+                except Exception as e:
+                    logger.debug(f"Local Stable Diffusion attempt {attempt+1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2 ** attempt) # Exponential backoff
+            logger.warning("All SD.Next retry attempts failed, falling back to cloud.")
 
         # 2. Fallback to Pollinations.ai (Free Cloud)
         encoded_prompt = quote(prompt)

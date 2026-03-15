@@ -20,6 +20,7 @@ import { ProfileManagement } from '@/sections/ProfileManagement';
 import { CampaignControl } from '@/sections/CampaignControl';
 import { SystemMonitor } from '@/sections/SystemMonitor';
 import { Settings } from '@/sections/Settings';
+import AnalyticsDashboard from '@/sections/AnalyticsDashboard';
 import { NewContentDialog } from './NewContentDialog';
 
 export function Layout() {
@@ -55,6 +56,8 @@ export function Layout() {
         return <VideoProduction />;
       case 'monitor':
         return <SystemMonitor />;
+      case 'analytics':
+        return <AnalyticsDashboard />;
       case 'settings':
         return <Settings />;
       default:

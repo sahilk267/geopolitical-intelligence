@@ -156,7 +156,34 @@ class PipelineService:
             except Exception as e:
                 pipeline_result["errors"].append(f"Short clip: {str(e)}")
 
-        # ── Step 5: Distribution ──
+        # ── Step 5: Generate presenter avatar ──
+        if generate_presenter and pipeline_result["steps"].get("audio", {}).get("status") == "success":
+            try:
+                # Extract avatar settings from video_style (if available)
+                avatar_config = profile_dict.get("videoStyle", {}).get("avatar", {}) if profile_dict else {}
+                presenter_image = avatar_config.get("presenter_image")
+                
+                # generate_lipsync takes local path or URL, handled by avatar_service
+                avatar_result = await avatar_service.generate_lipsync(
+                    audio_url=audio_result["path"],  # Use local path for local engines
+                    presenter_image=presenter_image
+                )
+                
+                if "error" in avatar_result:
+                    logger.warning(f"Avatar generation failed: {avatar_result['error']}")
+                    pipeline_result["errors"].append(f"Avatar: {avatar_result['error']}")
+                    pipeline_result["steps"]["avatar"] = {"status": "failed"}
+                else:
+                    pipeline_result["steps"]["avatar"] = {
+                        "status": "success",
+                        "url": avatar_result["url"],
+                        "path": avatar_result["path"]
+                    }
+            except Exception as e:
+                logger.error(f"Avatar step exception: {e}")
+                pipeline_result["errors"].append(f"Avatar: {str(e)}")
+
+        # ── Step 6: Distribution ──
         if distribute_to and pipeline_result["steps"].get("short_clip", {}).get("status") == "success":
             video_url = pipeline_result["steps"]["short_clip"]["url"]
             video_path = video_url.replace("/output/", settings.VIDEO_OUTPUT_DIR + os.sep)

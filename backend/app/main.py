@@ -168,6 +168,7 @@ from app.api.v1.endpoints import (
     distribution,
     profiles,
     campaigns,
+    analytics,
 )
 
 # Include API routers
@@ -193,6 +194,7 @@ app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline"]
 app.include_router(distribution.router, prefix="/api/v1/distribution", tags=["Distribution"])
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(campaigns.router, prefix="/api/v1/campaigns", tags=["Campaigns"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 
 # Static file serving for generated media (audio, video, thumbnails)
 import os

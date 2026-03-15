@@ -120,13 +120,19 @@ class RAGService:
             memories = []
             if results and results.get("documents"):
                 for i, doc in enumerate(results["documents"][0]):
+                    distance = results["distances"][0][i] if results.get("distances") else 0
+                    
+                    # Distance filter: smaller is better. > 0.65 is usually irrelevant for this embedding space.
+                    if distance > 0.65:
+                        continue
+                        
                     memories.append({
                         "text": doc,
                         "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
-                        "distance": results["distances"][0][i] if results.get("distances") else 0,
+                        "distance": distance,
                     })
 
-            logger.info(f"RAG: recalled {len(memories)} memories for persona {profile_id[:8]}")
+            logger.info(f"RAG: recalled {len(memories)} memories for persona {profile_id[:8]} (filtered from {len(results.get('documents', [[]])[0])} retrieved)")
             return memories
 
         except Exception as e:

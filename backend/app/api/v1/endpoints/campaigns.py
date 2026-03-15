@@ -150,7 +150,7 @@ async def trigger_campaign(
             category=cat,
             profile_id=campaign.profile_id,
             generate_short=True,
-            generate_presenter=False,
+            generate_presenter=True,
         )
         results.append(res)
     

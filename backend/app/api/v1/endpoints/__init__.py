@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     distribution,
     profiles,
     campaigns,
+    analytics,
 )
 
 __all__ = [
@@ -47,4 +48,5 @@ __all__ = [
     "distribution",
     "profiles",
     "campaigns",
+    "analytics",
 ]
