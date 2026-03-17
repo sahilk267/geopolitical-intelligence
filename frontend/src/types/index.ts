@@ -36,11 +36,13 @@ export interface RiskAssessment {
   contentId: string;
   scores: RiskScores;
   factors: RiskFactors;
+  riskFactors?: RiskFactors;
   assessedAt: string;
   assessedBy: string;
   requiresSeniorReview: boolean;
   safeModeBlocked: boolean;
   notes: string;
+  safeModeViolations?: string[];
 }
 
 // --------------------------------------------

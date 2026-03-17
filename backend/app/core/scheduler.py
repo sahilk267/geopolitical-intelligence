@@ -4,12 +4,21 @@ Background Task Scheduler for Source Polling
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.models.source import Source
 from app.models.campaign import Campaign
+from app.models.article import NormalizedArticle
+from app.models.user import User
+from app.models.brief import WeeklyBrief
+from app.models.eri import ERIAssessment
+from app.services.risk_service import risk_service
 from app.api.v1.endpoints.sources import fetch_from_source
 
 logger = logging.getLogger(__name__)
@@ -82,11 +91,11 @@ async def process_automation_schedules(db: AsyncSession):
                 
                 elif schedule.task_type == AutomationTaskType.RISK_ASSESSMENT:
                     logger.info(f"Risk assessment task triggered: {schedule.name}")
-                    # TODO: Implement risk assessment automation in Phase 6
-                
+                    await _run_risk_assessment_automation(db)
+
                 elif schedule.task_type == AutomationTaskType.WEEKLY_BRIEF:
                     logger.info(f"Weekly brief task triggered: {schedule.name}")
-                    # TODO: Implement weekly brief automation in Phase 6
+                    await _run_weekly_brief_automation(db)
                 
                 elif schedule.task_type == AutomationTaskType.FETCH_SOURCES:
                     await source_service.fetch_all_enabled(db)
@@ -156,3 +165,102 @@ async def process_campaign_schedules(db: AsyncSession):
             except Exception as e:
                 logger.error(f"Failed to execute Campaign {campaign.name}: {e}")
                 await db.rollback()
+
+
+async def _get_system_user_id(db: AsyncSession) -> Optional[str]:
+    """Return an admin / superuser ID for automation tasks."""
+    result = await db.execute(select(User).where(User.is_superuser == True).limit(1))
+    user = result.scalar_one_or_none()
+    if user:
+        return str(user.id)
+    result = await db.execute(select(User).limit(1))
+    fallback = result.scalar_one_or_none()
+    return str(fallback.id) if fallback else None
+
+
+async def _run_risk_assessment_automation(db: AsyncSession):
+    """Schedule risk assessments for any articles lacking a score."""
+    user_id = await _get_system_user_id(db)
+    if not user_id:
+        logger.warning("Risk automation skipped because no system user exists.")
+        return
+
+    result = await db.execute(
+        select(NormalizedArticle).options(selectinload(NormalizedArticle.risk_score))
+    )
+    articles = result.scalars().all()
+    created = 0
+
+    for article in articles:
+        if article.risk_score is not None:
+            continue
+        try:
+            await risk_service.assess_article(article, user_id, db, settings.SAFE_MODE_ENABLED)
+            created += 1
+        except Exception as exc:
+            logger.error(f"Automated risk assessment failed for article {article.id}: {exc}")
+
+    logger.info(f"Risk automation created {created} new assessments.")
+
+
+async def _run_weekly_brief_automation(db: AsyncSession):
+    """Generate a weekly brief based on the latest ERI assessment."""
+    user_id = await _get_system_user_id(db)
+    if not user_id:
+        logger.warning("Weekly brief automation skipped because no system user exists.")
+        return
+
+    now = datetime.utcnow()
+    week_number = now.isocalendar()[1]
+    year = now.year
+
+    existing = await db.execute(
+        select(WeeklyBrief).where(
+            WeeklyBrief.week_number == week_number,
+            WeeklyBrief.year == year
+        )
+    )
+    if existing.scalar_one_or_none():
+        logger.info(f"Weekly brief already exists for {year}-W{week_number}; skipping automation.")
+        return
+
+    eri_result = await db.execute(
+        select(ERIAssessment).order_by(ERIAssessment.created_at.desc()).limit(1)
+    )
+    latest_eri = eri_result.scalar_one_or_none()
+    if not latest_eri:
+        logger.warning("Weekly brief automation skipped because no ERI assessment exists.")
+        return
+
+    brief = WeeklyBrief(
+        week_number=week_number,
+        year=year,
+        title=f"Weekly Escalation Brief | Week {week_number}",
+        subtitle=f"ERI {latest_eri.overall_score} ({latest_eri.classification.value})",
+        eri_assessment_id=latest_eri.id,
+        eri_score=latest_eri.overall_score,
+        executive_summary={
+            "what_changed": f"Overall ERI reached {latest_eri.overall_score} ({latest_eri.classification.value}).",
+            "what_is_stable": "Diplomatic engagement remains steady.",
+            "risk_increased": "Military activity and proxy movements are trending upward."
+            if latest_eri.military_score > 60 else "Military posture held steady.",
+            "risk_decreased": "Economic pressures show signs of resilience.",
+            "military_activity": f"{latest_eri.military_score}/100",
+            "proxy_activity": f"{latest_eri.proxy_score}/100",
+            "diplomatic_track": f"{latest_eri.diplomatic_score}/100",
+        },
+        key_developments=latest_eri.key_developments or [],
+        scenario_outlook=latest_eri.scenarios or [],
+        indicators_to_watch=latest_eri.indicators_to_watch or [],
+        stakeholder_positions=latest_eri.stakeholder_positions or [],
+        methodology="Automated weekly risk briefs generated from the latest ERI snapshot.",
+        created_by=user_id,
+    )
+    brief.html_content = brief.generate_html()
+    brief.scenarios = latest_eri.scenarios or []
+
+    db.add(brief)
+    await db.commit()
+    await db.refresh(brief)
+
+    logger.info(f"Weekly brief for {year}-W{week_number} generated automatically (ID: {brief.id}).")

@@ -287,7 +287,7 @@ export function RiskAnalysis() {
                     <div>
                       <h4 className="text-sm font-medium text-white mb-3">Detected Risk Factors</h4>
                       <div className="flex flex-wrap gap-2">
-                        {Object.entries(selectedRisk.factors)
+                        {Object.entries(selectedRisk.riskFactors || selectedRisk.factors)
                           .filter(([_, value]) => value)
                           .map(([key]) => (
                             <Badge
@@ -305,7 +305,7 @@ export function RiskAnalysis() {
                     <div>
                       <h4 className="text-sm font-medium text-white mb-3">Mitigation Suggestions</h4>
                       <ul className="space-y-2">
-                        {getRiskMitigationSuggestions(selectedRisk.factors).map((suggestion, i) => (
+                        {getRiskMitigationSuggestions(selectedRisk.riskFactors || selectedRisk.factors).map((suggestion, i) => (
                           <li
                             key={i}
                             className="flex items-start gap-2 text-sm text-slate-300"
@@ -327,6 +327,16 @@ export function RiskAnalysis() {
                         <p className="text-sm text-red-400/80 mt-1">
                           This content cannot be published while Safe Mode is enabled.
                         </p>
+                        {selectedRisk.safeModeViolations?.length ? (
+                          <ul className="mt-3 space-y-1 text-xs text-red-200">
+                            {selectedRisk.safeModeViolations.map((violation, idx) => (
+                              <li key={idx} className="flex items-start gap-2">
+                                <span className="font-semibold">•</span>
+                                <span>{violation}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
                     )}
                   </div>

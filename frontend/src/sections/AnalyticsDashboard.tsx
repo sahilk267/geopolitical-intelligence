@@ -9,9 +9,16 @@ import {
   XCircle,
   AlertCircle,
   Clock,
-  Trash2
+  Trash2,
+  Cloud,
+  FileVideo,
+  MonitorPlay,
+  HelpCircle
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 export default function AnalyticsDashboard() {
   const [performance, setPerformance] = useState<any>(null);
@@ -23,18 +30,42 @@ export default function AnalyticsDashboard() {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const [perfRes, ragRes, distRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getPerformanceStats(),
         api.getRagStats(),
         api.getDistributionStats()
       ]);
-      setPerformance(perfRes);
-      setRagStats(ragRes as unknown as any[]);
-      setDistribution(distRes);
-      setError('');
+
+      if (results[0].status === 'fulfilled') {
+        setPerformance(results[0].value);
+      } else {
+        console.error('Performance stats failed:', results[0].reason);
+      }
+
+      if (results[1].status === 'fulfilled') {
+        const value = results[1].value;
+        setRagStats(Array.isArray(value) ? (value as any[]) : []);
+      } else {
+        console.error('RAG stats failed:', results[1].reason);
+        setRagStats([]);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        setDistribution(results[2].value);
+      } else {
+        console.error('Distribution stats failed:', results[2].reason);
+      }
+
+      // Only show error bar if ALL failed
+      if (results.every(r => r.status === 'rejected')) {
+        const firstError = (results[0] as PromiseRejectedResult).reason;
+        setError(`Failed to load ALL analytics data: ${firstError.message || 'Server connection error'}`);
+      } else {
+        setError('');
+      }
     } catch (err: any) {
       console.error('Failed to load analytics:', err);
-      setError('Failed to load analytics data.');
+      setError(`Unexpected error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -59,9 +90,12 @@ export default function AnalyticsDashboard() {
     switch (status) {
       case 'online':
       case 'available':
+      case 'configured':
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case 'offline':
       case 'missing':
+      case 'missing_key':
+      case 'path_mismatch':
         return <XCircle className="h-5 w-5 text-red-500" />;
       default:
         return <AlertCircle className="h-5 w-5 text-yellow-500" />;
@@ -72,14 +106,21 @@ export default function AnalyticsDashboard() {
     switch (status) {
       case 'online':
       case 'available':
+      case 'configured':
         return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800';
       case 'offline':
       case 'missing':
+      case 'missing_key':
+      case 'path_mismatch':
         return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800';
       default:
         return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800';
     }
   };
+
+  // Helper to safely access nested performance data
+  const localStats = performance?.local || performance;
+  const cloudStats = performance?.cloud || {};
 
   return (
     <div className="space-y-6">
@@ -89,13 +130,13 @@ export default function AnalyticsDashboard() {
             Advanced Analytics & Monitoring
           </h2>
           <p className="text-muted-foreground mt-1">
-            Real-time health telemetry for local AI services and RAG memory efficiency.
+            Real-time health telemetry for AI services and pipeline efficiency.
           </p>
         </div>
         <button
           onClick={fetchStats}
           disabled={loading}
-          className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 flex items-center space-x-2"
+          className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 flex items-center space-x-2 transition-all active:scale-95"
         >
           <Activity className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -103,263 +144,272 @@ export default function AnalyticsDashboard() {
       </div>
 
       {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-lg flex items-center">
+        <div className="bg-destructive/10 text-destructive p-4 rounded-lg flex items-center border border-destructive/20 animate-in fade-in slide-in-from-top-4">
           <AlertCircle className="w-5 h-5 mr-2" />
           {error}
         </div>
       )}
 
-      {/* Local AI Services Grid */}
-      <h3 className="text-lg font-semibold flex items-center">
-        <Cpu className="w-5 h-5 mr-2" />
-        Local AI Engine Status
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Ollama */}
-        <div className="bg-card border rounded-lg p-5 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center">
-              <Server className="w-6 h-6 text-blue-500 mr-3" />
-              <div>
-                <h4 className="font-semibold text-lg">Ollama (LLM)</h4>
-                <p className="text-sm text-muted-foreground font-mono truncate max-w-[150px]">
-                  {performance?.ollama?.model || 'Unknown Model'}
-                </p>
-              </div>
-            </div>
-            {getStatusIcon(performance?.ollama?.status)}
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Status</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(performance?.ollama?.status)}`}>
-                {performance?.ollama?.status?.toUpperCase() || 'UNKNOWN'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Ping Latency</span>
-              <span className="font-mono">{performance?.ollama?.latency_ms || 0} ms</span>
-            </div>
-          </div>
-          {performance?.ollama?.status === 'offline' && (
-            <div className="mt-4 p-2 bg-red-500/10 text-red-500 text-xs rounded border border-red-500/20">
-              Ensure Ollama is running locally and CORS is configured.
-            </div>
-          )}
-        </div>
+      <Tabs defaultValue="local" className="space-y-6">
+        <TabsList className="bg-muted/50 p-1">
+          <TabsTrigger value="local" className="flex items-center gap-2">
+            <Cpu className="w-4 h-4" />
+            Local AI Engines
+          </TabsTrigger>
+          <TabsTrigger value="cloud" className="flex items-center gap-2">
+            <Cloud className="w-4 h-4" />
+            Cloud & External APIs
+          </TabsTrigger>
+          <TabsTrigger value="memory" className="flex items-center gap-2">
+            <Database className="w-4 h-4" />
+            RAG Memory
+          </TabsTrigger>
+        </TabsList>
 
-        {/* SD.Next */}
-        <div className="bg-card border rounded-lg p-5 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center">
-              <Activity className="w-6 h-6 text-purple-500 mr-3" />
-              <div>
-                <h4 className="font-semibold text-lg">SD.Next (Images)</h4>
-                <p className="text-sm text-muted-foreground">Local API</p>
-              </div>
-            </div>
-            {getStatusIcon(performance?.sd_next?.status)}
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Status</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(performance?.sd_next?.status)}`}>
-                {performance?.sd_next?.status?.toUpperCase() || 'UNKNOWN'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Ping Latency</span>
-              <span className="font-mono">{performance?.sd_next?.latency_ms || 0} ms</span>
-            </div>
-          </div>
-          {performance?.sd_next?.status === 'offline' && (
-            <div className="mt-4 p-2 bg-red-500/10 text-red-500 text-xs rounded border border-red-500/20">
-              Ensure SD.Next is running with --api flag enabled.
-            </div>
-          )}
-        </div>
+        <TabsContent value="local" className="space-y-6 animate-in fade-in duration-300">
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Ollama */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <Server className="w-5 h-5 text-blue-500" />
+                    {getStatusIcon(localStats?.ollama?.status)}
+                  </div>
+                  <CardTitle className="text-base mt-2">Ollama (LLM)</CardTitle>
+                  <CardDescription className="truncate font-mono text-[10px]">
+                    {localStats?.ollama?.model || 'llama2'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold font-mono">
+                    {localStats?.ollama?.latency_ms || 0}ms
+                  </div>
+                  <Badge variant="outline" className={`mt-2 text-[10px] ${getStatusColor(localStats?.ollama?.status)}`}>
+                    {localStats?.ollama?.status?.toUpperCase() || 'OFFLINE'}
+                  </Badge>
+                </CardContent>
+              </Card>
 
-        {/* SadTalker */}
-        <div className="bg-card border rounded-lg p-5 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center">
-              <Activity className="w-6 h-6 text-pink-500 mr-3" />
-              <div>
-                <h4 className="font-semibold text-lg">SadTalker (Video)</h4>
-                <p className="text-sm text-muted-foreground">Local CLI</p>
-              </div>
-            </div>
-            {getStatusIcon(performance?.sadtalker?.status)}
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Status</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(performance?.sadtalker?.status)}`}>
-                {performance?.sadtalker?.status?.toUpperCase() || 'UNKNOWN'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Local Path</span>
-            </div>
-            <div className="text-xs bg-muted p-2 rounded truncate font-mono" title={performance?.sadtalker?.path}>
-              {performance?.sadtalker?.path || '-'}
-            </div>
-          </div>
-        </div>
-      </div>
+              {/* SD.Next */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <Activity className="w-5 h-5 text-purple-500" />
+                    {getStatusIcon(localStats?.sd_next?.status)}
+                  </div>
+                  <CardTitle className="text-base mt-2">SD.Next (Image)</CardTitle>
+                  <CardDescription className="text-xs">
+                    Local Diffusion API
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold font-mono">
+                    {localStats?.sd_next?.latency_ms || 0}ms
+                  </div>
+                  <Badge variant="outline" className={`mt-2 text-[10px] ${getStatusColor(localStats?.sd_next?.status)}`}>
+                    {localStats?.sd_next?.status?.toUpperCase() || 'OFFLINE'}
+                  </Badge>
+                </CardContent>
+              </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* RAG Memory Insights */}
-        <div className="bg-card border rounded-lg shadow-sm flex flex-col">
-          <div className="p-5 border-b flex justify-between items-center">
-            <h3 className="text-lg font-semibold flex items-center">
-              <Database className="w-5 h-5 mr-2 text-primary" />
-              Persona RAG Memory
-            </h3>
-            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
-              ChromaDB
-            </span>
+              {/* SadTalker */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <MonitorPlay className="w-5 h-5 text-pink-500" />
+                    {getStatusIcon(localStats?.sadtalker?.status)}
+                  </div>
+                  <CardTitle className="text-base mt-2">SadTalker (Video)</CardTitle>
+                  <CardDescription className="text-xs truncate" title={localStats?.sadtalker?.path}>
+                    {localStats?.sadtalker?.path ? 'Installed' : 'Not Configured'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xs font-medium truncate text-muted-foreground mb-1">
+                    {localStats?.sadtalker?.status === 'path_mismatch' ? 'PATH ERROR' : 'STATUS'}
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] ${getStatusColor(localStats?.sadtalker?.status)}`}>
+                    {localStats?.sadtalker?.status?.replace('_', ' ').toUpperCase() || 'MISSING'}
+                  </Badge>
+                  {localStats?.sadtalker?.warning && (
+                     <p className="mt-2 text-[9px] text-red-500 leading-tight">
+                       {localStats.sadtalker.warning}
+                     </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* FFmpeg */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <FileVideo className="w-5 h-5 text-amber-500" />
+                    {getStatusIcon(localStats?.ffmpeg?.status)}
+                  </div>
+                  <CardTitle className="text-base mt-2">FFmpeg (Render)</CardTitle>
+                  <CardDescription className="text-xs truncate">
+                    {localStats?.ffmpeg?.version !== 'unknown' ? localStats?.ffmpeg?.version : 'System Tool'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                   <div className="text-xs font-medium text-muted-foreground mb-1">VERSION</div>
+                   <div className="text-xs font-mono truncate mb-2">{localStats?.ffmpeg?.version || 'N/A'}</div>
+                   <Badge variant="outline" className={`text-[10px] ${getStatusColor(localStats?.ffmpeg?.status)}`}>
+                    {localStats?.ffmpeg?.status?.toUpperCase() || 'MISSING'}
+                  </Badge>
+                </CardContent>
+              </Card>
+           </div>
+
+           {/* Docker Troubleshooting Tips */}
+           <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-900/10 dark:border-blue-900/30 mt-6 animate-in slide-in-from-bottom-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-blue-500" />
+                  Docker Connectivity Troubleshooting
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="text-xs space-y-2 text-muted-foreground">
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-500 text-[10px] mt-0.5 whitespace-nowrap">OLLAMA / SD:</span>
+                    If status is <b>OFFLINE</b>, ensure your local tools are configured to listen on <b>0.0.0.0</b> (not just 127.0.0.1) so <b>host.docker.internal</b> can reach them.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="font-bold text-blue-500 text-[10px] mt-0.5 whitespace-nowrap">SADTALKER:</span>
+                    If <b>MISSING</b>, you must mount your local SadTalker folder as a volume in <b>docker-compose.yml</b>. See the commented line in that file.
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="cloud" className="space-y-6 animate-in fade-in duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cloud className="w-5 h-5 text-primary" />
+                  AI Intelligence & Voice
+                </CardTitle>
+                <CardDescription>Status of paid cloud provider configurations.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                 {[
+                   { name: 'Gemini (LLM)', icon: Cloud, key: 'gemini', color: 'text-blue-500' },
+                   { name: 'ElevenLabs (TTS)', icon: Activity, key: 'elevenlabs', color: 'text-green-500' },
+                   { name: 'D-ID (Avatar)', icon: MonitorPlay, key: 'did', color: 'text-indigo-500' },
+                   { name: 'HeyGen (Avatar)', icon: Activity, key: 'heygen', color: 'text-purple-500' },
+                 ].map(service => (
+                   <div key={service.key} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <service.icon className={`w-5 h-5 ${service.color}`} />
+                        <span className="font-medium text-sm">{service.name}</span>
+                      </div>
+                      <Badge variant="outline" className={`text-[10px] ${getStatusColor(cloudStats[service.key]?.status)}`}>
+                         {(cloudStats[service.key]?.status || 'NOT SETUP').replace('_', ' ').toUpperCase()}
+                      </Badge>
+                   </div>
+                 ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Network className="w-5 h-5 text-primary" />
+                  Distribution Services
+                </CardTitle>
+                <CardDescription>Social media platform connectivity status.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                 {[
+                   { name: 'Telegram Bot', key: 'telegram', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z' },
+                   { name: 'YouTube API', key: 'youtube', icon: 'M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z' },
+                   { name: 'X / Twitter', key: 'twitter', icon: 'M13.202 10.566 19.3.5h-1.446l-5.304 6.166L8.3 .5H3.42l6.393 9.305-6.393 7.39h1.445l5.59-6.499 4.803 6.499h4.881l-6.945-10.13Z' },
+                   { name: 'Discord Webhook', key: 'discord', icon: 'M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.' },
+                 ].map(platform => (
+                   <div key={platform.key} className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <svg className="w-5 h-5 opacity-70" fill="currentColor" viewBox="0 0 24 24">
+                          <path d={platform.icon} />
+                        </svg>
+                        <span className="font-medium text-sm">{platform.name}</span>
+                      </div>
+                      <Badge variant="outline" className={`text-[10px] ${distribution?.[platform.key] ? getStatusColor('online') : getStatusColor('offline')}`}>
+                         {distribution?.[platform.key] ? 'CONNECTED' : 'DISABLED'}
+                      </Badge>
+                   </div>
+                 ))}
+              </CardContent>
+            </Card>
           </div>
-          <div className="p-0 overflow-auto max-h-[400px]">
-            {ragStats.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <Database className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>No personas found or RAG disabled.</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-muted-foreground text-left sticky top-0">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">Persona</th>
-                    <th className="px-5 py-3 font-medium">Collection</th>
-                    <th className="px-5 py-3 font-medium text-right">Stored Chunks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {ragStats.map((stat, i) => (
-                    <tr key={i} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-foreground">{stat.profile_name}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{stat.persona_type}</div>
-                      </td>
-                      <td className="px-5 py-3 text-xs font-mono text-muted-foreground">
-                        {stat.collection_name || '-'}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-                          {stat.total_memories !== undefined ? stat.total_memories : 'Error'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+        </TabsContent>
 
-        {/* Global Pipeline Health */}
-        <div className="bg-card border rounded-lg shadow-sm p-5">
-          <h3 className="text-lg font-semibold flex items-center mb-6">
-            <Network className="w-5 h-5 mr-2 text-primary" />
-            Distribution Gateways
-          </h3>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-[#1DA1F2]/10 flex items-center justify-center mr-4">
-                  <span className="text-[#1DA1F2] font-bold text-xl">X</span>
+        <TabsContent value="memory" className="animate-in fade-in duration-300">
+           <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                   <div>
+                    <CardTitle>RAG Memory Statistics</CardTitle>
+                    <CardDescription>Document vector distribution across personas.</CardDescription>
+                   </div>
+                   <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">ChromaDB</Badge>
                 </div>
-                <div>
-                  <h4 className="font-medium">X (Twitter)</h4>
-                  <p className="text-xs text-muted-foreground">OAuth 1.0a (v1.1 + v2)</p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-auto max-h-[600px]">
+                  {ragStats.length === 0 ? (
+                    <div className="p-12 text-center text-muted-foreground">
+                      <Database className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p>No personas found or RAG disabled.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-muted-foreground text-left sticky top-0">
+                        <tr>
+                          <th className="px-5 py-4 font-medium">Persona</th>
+                          <th className="px-5 py-4 font-medium">Collection Name</th>
+                          <th className="px-5 py-4 font-medium text-right">Knowledge Chunks</th>
+                          <th className="px-5 py-4 font-medium text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {ragStats.map((stat: any, i: number) => (
+                          <tr key={i} className="hover:bg-muted/50 transition-colors group">
+                            <td className="px-5 py-4">
+                              <div className="font-semibold text-foreground">{stat.profile_name}</div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{stat.persona_type || 'Custom Persona'}</div>
+                            </td>
+                            <td className="px-5 py-4 text-xs font-mono text-muted-foreground opacity-70">
+                              {stat.collection_name || 'persona_memory_v1'}
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${stat.error ? 'bg-red-500/10 text-red-600' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'}`}>
+                                 {stat.error ? 'ERROR' : (stat.total_memories !== undefined ? stat.total_memories.toLocaleString() : '??')}
+                               </span>
+                               {stat.error && <div className="text-[10px] text-red-500 mt-1 max-w-[200px] truncate" title={stat.error}>{stat.error}</div>}
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              <button className="p-2 text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
-              </div>
-              <div>
-                {distribution?.twitter ? (
-                  <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" /> Configured
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium flex items-center">
-                    <XCircle className="w-3 h-3 mr-1" /> Disabled
-                  </span>
-                )}
-              </div>
-            </div>
+              </CardContent>
+           </Card>
+        </TabsContent>
+      </Tabs>
 
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-[#5865F2]/10 flex items-center justify-center mr-4">
-                  <svg className="w-6 h-6 text-[#5865F2]" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-                </div>
-                <div>
-                  <h4 className="font-medium">Discord</h4>
-                  <p className="text-xs text-muted-foreground">Webhook Integrations</p>
-                </div>
-              </div>
-              <div>
-                {distribution?.discord ? (
-                  <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" /> Configured
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium flex items-center">
-                    <XCircle className="w-3 h-3 mr-1" /> Disabled
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-[#0088cc]/10 flex items-center justify-center mr-4">
-                  <svg className="w-5 h-5 text-[#0088cc]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
-                </div>
-                <div>
-                  <h4 className="font-medium">Telegram</h4>
-                  <p className="text-xs text-muted-foreground">Bot API</p>
-                </div>
-              </div>
-              <div>
-                {distribution?.telegram ? (
-                  <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" /> Configured
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium flex items-center">
-                    <XCircle className="w-3 h-3 mr-1" /> Disabled
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-[#FF0000]/10 flex items-center justify-center mr-4">
-                  <svg className="w-5 h-5 text-[#FF0000]" fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
-                </div>
-                <div>
-                  <h4 className="font-medium">YouTube</h4>
-                  <p className="text-xs text-muted-foreground">Data API v3</p>
-                </div>
-              </div>
-              <div>
-                {distribution?.youtube ? (
-                  <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium flex items-center">
-                    <CheckCircle2 className="w-3 h-3 mr-1" /> Configured
-                  </span>
-                ) : (
-                  <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium flex items-center">
-                    <XCircle className="w-3 h-3 mr-1" /> Disabled
-                  </span>
-                )}
-              </div>
-            </div>
-            
-          </div>
-        </div>
+      <div className="text-center p-4">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] opacity-50">
+          Telemetry Feed v2.0 • Last Sync: {new Date().toLocaleTimeString()}
+        </p>
       </div>
     </div>
   );

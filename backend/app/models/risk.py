@@ -112,16 +112,27 @@ class RiskScore(Base):
             return "Editor in Chief + Legal Review"
     
     def to_dict(self) -> dict:
+        """Return API-ready risk assessment."""
+        scores = {
+            "legalRisk": self.legal_risk,
+            "defamationRisk": self.defamation_risk,
+            "platformRisk": self.platform_risk,
+            "politicalSensitivity": self.political_risk,
+            "overallScore": self.overall_score,
+        }
+
         return {
             "id": str(self.id),
-            "legal_risk": self.legal_risk,
-            "defamation_risk": self.defamation_risk,
-            "platform_risk": self.platform_risk,
-            "political_risk": self.political_risk,
-            "overall_score": self.overall_score,
+            "articleId": str(self.article_id),
+            "scores": scores,
             "classification": self.classification,
-            "safe_mode_blocked": self.safe_mode_blocked,
-            "requires_senior_review": self.requires_senior_review,
-            "mitigation_suggestions": self.mitigation_suggestions or [],
-            "assessed_at": self.assessed_at.isoformat() if self.assessed_at else None,
+            "riskFactors": self.risk_factors or {},
+            "requiresSeniorReview": self.requires_senior_review,
+            "safeModeBlocked": self.safe_mode_blocked,
+            "safeModeViolations": self.safe_mode_violations or [],
+            "mitigationSuggestions": self.mitigation_suggestions or [],
+            "assessedBy": str(self.assessed_by) if self.assessed_by else None,
+            "assessedAt": self.assessed_at.isoformat() if self.assessed_at else None,
+            "createdAt": self.created_at.isoformat() if self.created_at else None,
+            "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
         }

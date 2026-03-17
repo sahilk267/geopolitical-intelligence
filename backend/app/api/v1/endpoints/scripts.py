@@ -97,7 +97,7 @@ async def generate_script(
     script = Script(
         article_id=article_id,
         title=article.headline,
-        topic=article.topic,
+        topic=article.category or "General",
         target_duration_seconds=target_duration,
         layers=[l.value for l in layers],
         segments=segments,

@@ -46,7 +46,6 @@ async def get_rag_stats(
         try:
             stats = await rag_service.get_memory_stats(str(profile.id))
             stats["profile_name"] = profile.name
-            stats["persona_type"] = profile.persona_type
             stats_list.append(stats)
         except Exception as e:
             logger.error(f"Failed to get RAG stats for profile {profile.id}: {e}")
@@ -65,10 +64,22 @@ async def get_performance_stats(
     current_user: User = Depends(get_current_user),
 ) -> Any:
     """Get performance and health status of local AI services."""
+    import shutil
+    import subprocess
+
     stats = {
-        "ollama": {"status": "unknown", "latency_ms": 0, "model": settings.OLLAMA_MODEL},
-        "sd_next": {"status": "unknown", "latency_ms": 0, "url": settings.STABLE_DIFFUSION_URL},
-        "sadtalker": {"status": "unknown", "path": settings.SADTALKER_DIR},
+        "local": {
+            "ollama": {"status": "unknown", "latency_ms": 0, "model": settings.OLLAMA_MODEL},
+            "sd_next": {"status": "unknown", "latency_ms": 0, "url": settings.STABLE_DIFFUSION_URL},
+            "sadtalker": {"status": "unknown", "path": settings.SADTALKER_DIR},
+            "ffmpeg": {"status": "unknown", "version": "unknown"},
+        },
+        "cloud": {
+            "gemini": {"status": "configured" if settings.GEMINI_API_KEY else "missing_key", "model": settings.LLM_MODEL},
+            "elevenlabs": {"status": "configured" if settings.ELEVENLABS_API_KEY else "missing_key"},
+            "did": {"status": "configured" if getattr(settings, "DID_API_KEY", None) else "missing_key"},
+            "heygen": {"status": "configured" if getattr(settings, "HEYGEN_API_KEY", None) else "missing_key"},
+        },
         "engine": settings.AI_PROVIDER
     }
 
@@ -78,12 +89,12 @@ async def get_performance_stats(
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(url)
             if resp.status_code == 200:
-                stats["ollama"]["status"] = "online"
-                stats["ollama"]["latency_ms"] = int(resp.elapsed.total_seconds() * 1000)
+                stats["local"]["ollama"]["status"] = "online"
+                stats["local"]["ollama"]["latency_ms"] = int(resp.elapsed.total_seconds() * 1000)
             else:
-                stats["ollama"]["status"] = "error"
+                stats["local"]["ollama"]["status"] = "error"
     except Exception:
-        stats["ollama"]["status"] = "offline"
+        stats["local"]["ollama"]["status"] = "offline"
 
     # Check SD.Next
     try:
@@ -91,22 +102,43 @@ async def get_performance_stats(
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(url)
             if resp.status_code == 200:
-                stats["sd_next"]["status"] = "online"
-                stats["sd_next"]["latency_ms"] = int(resp.elapsed.total_seconds() * 1000)
+                stats["local"]["sd_next"]["status"] = "online"
+                stats["local"]["sd_next"]["latency_ms"] = int(resp.elapsed.total_seconds() * 1000)
             else:
-                stats["sd_next"]["status"] = "error"
+                stats["local"]["sd_next"]["status"] = "error"
     except Exception:
-        stats["sd_next"]["status"] = "offline"
+        stats["local"]["sd_next"]["status"] = "offline"
+
+    # Check FFmpeg
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        try:
+            version_out = subprocess.check_output(["ffmpeg", "-version"], text=True, stderr=subprocess.STDOUT)
+            first_line = version_out.split('\n')[0]
+            stats["local"]["ffmpeg"]["status"] = "online"
+            stats["local"]["ffmpeg"]["version"] = first_line.split('version')[-1].split('Copyright')[0].strip()
+        except Exception:
+            stats["local"]["ffmpeg"]["status"] = "error"
+    else:
+        stats["local"]["ffmpeg"]["status"] = "missing"
 
     # Check SadTalker
     if settings.AVATAR_ENGINE == "local":
-        inference_script = os.path.join(settings.SADTALKER_DIR, "inference.py")
-        if os.path.exists(inference_script):
-            stats["sadtalker"]["status"] = "available"
+        # Check for path mismatch (Docker Linux vs Windows Host)
+        sadtalker_dir = settings.SADTALKER_DIR
+        is_docker = os.path.exists("/.dockerenv")
+        
+        if is_docker and (sadtalker_dir.startswith("C:") or sadtalker_dir.startswith("\\")):
+             stats["local"]["sadtalker"]["status"] = "path_mismatch"
+             stats["local"]["sadtalker"]["warning"] = "Windows path detected in Docker. Mount volume to /app/sadtalker."
         else:
-            stats["sadtalker"]["status"] = "missing"
+            inference_script = os.path.join(sadtalker_dir, "inference.py")
+            if os.path.exists(inference_script):
+                stats["local"]["sadtalker"]["status"] = "available"
+            else:
+                stats["local"]["sadtalker"]["status"] = "missing"
     else:
-        stats["sadtalker"]["status"] = f"disabled (using {settings.AVATAR_ENGINE})"
+        stats["local"]["sadtalker"]["status"] = f"disabled (using {settings.AVATAR_ENGINE})"
 
     return stats
 

@@ -89,14 +89,9 @@ export function VideoProduction() {
                 return;
             }
 
-            const result = await api.post('/distribution/publish', {
-                content_type: 'video',
-                platforms: platformList,
-                params: {
-                    video_id: jobId,
-                    title: `Intelligence Report: ${jobId.substring(0, 8)}`,
-                    description: "Automated geopolitical intelligence update."
-                }
+            const result = await api.distributeContent(jobId, platformList, {
+                title: `Intelligence Report: ${jobId.substring(0, 8)}`,
+                description: "Automated geopolitical intelligence update.",
             }) as any;
 
             alert('✅ Distribution triggered! Result: ' + JSON.stringify(result));

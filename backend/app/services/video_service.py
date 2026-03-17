@@ -132,7 +132,7 @@ class VideoRenderService:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if result.returncode != 0:
                 logger.error(f"FFmpeg failed with return code {result.returncode}")
-                logger.error(f"FFmpeg stdout: {result.stdout}")
+                logger.error(f"FFmpeg command: {' '.join(cmd)}")
                 logger.error(f"FFmpeg stderr: {result.stderr}")
                 return {"error": f"FFmpeg rendering failed: {result.stderr[:200]}"}
 

@@ -55,6 +55,8 @@ services:
     volumes:
       - ./backend:/app
       - ./backend/output:/app/output
+      # Uncomment the line below to connect your local SadTalker installation
+      # - ../sadtalker:/app/sadtalker
 
   frontend:
     build:

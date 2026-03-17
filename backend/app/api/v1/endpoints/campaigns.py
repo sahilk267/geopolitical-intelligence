@@ -27,33 +27,38 @@ async def list_campaigns(
     return [c.to_dict() for c in campaigns]
 
 
+from pydantic import BaseModel
+
+class CampaignCreate(BaseModel):
+    name: str
+    profile_id: UUID
+    description: Optional[str] = None
+    categories: List[str] = []
+    regions: List[str] = []
+    schedule_type: str = "daily"
+    schedule_config: dict = {}
+
 @router.post("/")
 async def create_campaign(
-    name: str,
-    profile_id: UUID,
-    description: Optional[str] = None,
-    categories: List[str] = [],
-    regions: List[str] = [],
-    schedule_type: str = "daily",
-    schedule_config: dict = {},
+    campaign_in: CampaignCreate,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_role(UserRole.SENIOR_EDITOR))
 ):
     """Create a new autonomous campaign."""
     # Verify profile exists
     from app.models.profile import Profile
-    profile_result = await db.execute(select(Profile).where(Profile.id == profile_id))
+    profile_result = await db.execute(select(Profile).where(Profile.id == campaign_in.profile_id))
     if not profile_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Profile not found")
 
     campaign = Campaign(
-        name=name,
-        profile_id=profile_id,
-        description=description,
-        categories=categories,
-        regions=regions,
-        schedule_type=schedule_type,
-        schedule_config=schedule_config,
+        name=campaign_in.name,
+        profile_id=campaign_in.profile_id,
+        description=campaign_in.description,
+        categories=campaign_in.categories,
+        regions=campaign_in.regions,
+        schedule_type=campaign_in.schedule_type,
+        schedule_config=campaign_in.schedule_config,
         created_by=current_user.id
     )
     db.add(campaign)

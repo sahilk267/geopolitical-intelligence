@@ -18,10 +18,15 @@ _embed_fn = None
 
 
 def _get_chroma_client():
-    return None
+    class MockClient:
+        def delete_collection(self, name): pass
+    return MockClient()
 
 def _get_collection(profile_id: str):
-    return None
+    class MockCollection:
+        name = "mock_collection"
+        def count(self): return 0
+    return MockCollection()
 
 
 class RAGService:

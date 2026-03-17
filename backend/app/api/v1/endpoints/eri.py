@@ -48,7 +48,7 @@ async def get_current_eri(
     assessment = result.scalar_one_or_none()
     
     if not assessment:
-        raise HTTPException(status_code=404, detail="No ERI assessment found")
+        return None
     
     return assessment.to_dict()
 

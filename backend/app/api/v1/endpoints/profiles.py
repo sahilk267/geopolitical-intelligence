@@ -27,25 +27,30 @@ async def list_profiles(
     return [p.to_dict() for p in profiles]
 
 
+from pydantic import BaseModel
+
+class ProfileCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    voice_engine: str = "edge-tts"
+    voice_id: Optional[str] = None
+    video_style: dict = {}
+    platform_configs: dict = {}
+
 @router.post("/")
 async def create_profile(
-    name: str,
-    description: Optional[str] = None,
-    voice_engine: str = "edge-tts",
-    voice_id: Optional[str] = None,
-    video_style: dict = {},
-    platform_configs: dict = {},
+    profile_in: ProfileCreate,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_role(UserRole.SENIOR_EDITOR))
 ):
     """Create a new content profile."""
     profile = Profile(
-        name=name,
-        description=description,
-        voice_engine=voice_engine,
-        voice_id=voice_id,
-        video_style=video_style,
-        platform_configs=platform_configs,
+        name=profile_in.name,
+        description=profile_in.description,
+        voice_engine=profile_in.voice_engine,
+        voice_id=profile_in.voice_id,
+        video_style=profile_in.video_style,
+        platform_configs=profile_in.platform_configs,
         created_by=current_user.id
     )
     db.add(profile)

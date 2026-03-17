@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppStore } from '@/store';
 import { api } from '@/lib/api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -101,6 +101,9 @@ export function NewContentDialog() {
             <DialogContent className="bg-[#0B1F3A] border-slate-700 max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="text-white">Create New Content</DialogTitle>
+                    <DialogDescription className="text-slate-400">
+                        Draft a briefing by summarizing a source URL or generating content directly with AI assistance.
+                    </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateContent} className="space-y-4">
                     <div>

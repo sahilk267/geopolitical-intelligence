@@ -76,7 +76,7 @@ class AvatarService:
         sadtalker_root = os.path.abspath(self.sadtalker_dir)
         inference_script = os.path.join(sadtalker_root, "inference.py")
         checkpoint_dir = os.path.join(sadtalker_root, "checkpoints")
-        venv_python = os.path.join(sadtalker_root, "venv", "Scripts", "python.exe")
+        # venv_python = os.path.join(sadtalker_root, "venv", "Scripts", "python.exe")
 
         # Validate installation
         if not os.path.exists(inference_script):
@@ -94,11 +94,31 @@ class AvatarService:
             }
 
         # Determine the Python executable
-        python_exe = venv_python if os.path.exists(venv_python) else "python"
+        python_exe = "python"  # Default in Docker/Linux
+        if not os.path.exists("/.dockerenv"):
+            # Only use Windows-style venv path if NOT in Docker
+            venv_python = os.path.join(sadtalker_root, "venv", "Scripts", "python.exe")
+            if os.path.exists(venv_python):
+                python_exe = venv_python
 
         # Resolve paths for the presenter image and audio
-        abs_image = os.path.abspath(presenter_image)
-        abs_audio = os.path.abspath(audio_path)
+        # If in Docker and path is Windows-style, try to make it relative to /app/sadtalker or similar
+        abs_image = presenter_image
+        abs_audio = audio_path
+
+        if os.path.exists("/.dockerenv"):
+            if abs_image.startswith("C:") or abs_image.startswith("\\"):
+                # Fallback for Docker: assumes host ./backend/assets/presenter.png is mounted to /app/assets/...
+                # or just use the filename if it's already in the expected structure
+                filename = os.path.basename(abs_image)
+                abs_image = os.path.join("/app", "assets", filename)
+                if not os.path.exists(abs_image):
+                     abs_image = presenter_image # Fallback to original and hope for the best
+            
+            abs_audio = os.path.abspath(audio_path)
+        else:
+            abs_image = os.path.abspath(presenter_image)
+            abs_audio = os.path.abspath(audio_path)
 
         if not os.path.exists(abs_image):
             logger.warning(f"Presenter image not found: {abs_image}. Using SadTalker example.")

@@ -55,6 +55,7 @@ import {
   Linkedin,
   MessageSquare,
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // ── Types ──
 interface ApiKeyStatus {
@@ -132,10 +133,11 @@ export function Settings() {
   const [categories, setCategories] = useState<{ category: string; article_count: number }[]>([]);
 
   // Sources
-  const [sources, setSources] = useState<SourceItem[]>([]);
-  const [loadingSources, setLoadingSources] = useState(false);
-  const [newSource, setNewSource] = useState({ name: '', url: '', category: '', region: '', type: 'rss' });
-  const [showAddSource, setShowAddSource] = useState(false);
+const [sources, setSources] = useState<SourceItem[]>([]);
+const [loadingSources, setLoadingSources] = useState(false);
+const [newSource, setNewSource] = useState({ name: '', url: '', category: '', region: '', type: 'rss' });
+const [showAddSource, setShowAddSource] = useState(false);
+const [sourceToggleError, setSourceToggleError] = useState<string | null>(null);
 
   // TTS
   const [ttsEngine, setTtsEngine] = useState('gtts');
@@ -197,6 +199,7 @@ export function Settings() {
 
   const loadSources = async () => {
     setLoadingSources(true);
+    setSourceToggleError(null);
     try {
       const data = await api.getDataSources() as any[];
       setSources(data as SourceItem[]);
@@ -302,9 +305,14 @@ export function Settings() {
 
   const handleToggleSource = async (id: string) => {
     try {
-      await api.toggleSource(id);
+      setSourceToggleError(null);
+      const source = sources.find((s) => s.id === id);
+      await api.updateSource(id, { is_enabled: source ? !source.is_enabled : true });
       loadSources();
-    } catch { /* ignore */ }
+    } catch (err: any) {
+      console.error('Source toggle failed:', err);
+      setSourceToggleError(err?.message || 'Failed to toggle source');
+    }
   };
 
   const handleDeleteSource = async (id: string) => {
@@ -691,6 +699,13 @@ export function Settings() {
               {sources.length} sources configured
             </Badge>
           </div>
+
+          {sourceToggleError && (
+            <Alert variant="destructive" className="mt-2">
+              <AlertTitle>Source Toggle Failed</AlertTitle>
+              <AlertDescription>{sourceToggleError}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Add Source Form */}
           {showAddSource && (

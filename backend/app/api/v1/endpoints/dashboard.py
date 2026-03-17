@@ -157,10 +157,15 @@ async def get_pipeline_status(
     result = await db.execute(select(NormalizedArticle))
     articles = result.scalars().all()
     
+    assessed_article_ids = {score.article_id for score in risk_scores}
+
     pipeline = {
         "ingestion": sum(1 for a in articles if a.status == ArticleStatus.NEW),
         "review": sum(1 for a in articles if a.status == ArticleStatus.PENDING_REVIEW),
-        "risk_assessment": sum(1 for a in articles if a.risk_score_id is None and a.status != ArticleStatus.NEW),
+        "risk_assessment": sum(
+            1 for a in articles
+            if a.id not in assessed_article_ids and a.status != ArticleStatus.NEW
+        ),
         "approved": sum(1 for a in articles if a.status == ArticleStatus.APPROVED),
         "published": sum(1 for a in articles if a.status == ArticleStatus.PUBLISHED),
     }

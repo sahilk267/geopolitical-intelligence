@@ -49,7 +49,6 @@ async def create_article(
         tags=article_in.tags or [],
         priority=article_in.priority or 0,
         status=ArticleStatus.DRAFT,
-        created_by=current_user.id
     )
     
     db.add(db_article)
@@ -218,7 +217,6 @@ async def process_raw_article(
         category=raw_article.category or "General",
         region=raw_article.region or "Global",
         status=ArticleStatus.DRAFT,
-        created_by=current_user.id
     )
     
     db.add(normalized)

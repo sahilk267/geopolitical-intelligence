@@ -9,6 +9,8 @@ import { api } from '@/lib/api';
 import type {
   ContentItem,
   RiskAssessment,
+  RiskFactors,
+  RiskScores,
   ERIAssessment,
   WeeklyBrief,
   EvidenceItem,
@@ -205,6 +207,39 @@ const mapArticleToContentItem = (article: any): ContentItem => ({
   publishedAt: article.published_at,
 });
 
+const normalizeRiskAssessment = (risk: any): RiskAssessment => {
+  const scores = risk.scores || {
+    legalRisk: risk.legal_risk ?? 0,
+    defamationRisk: risk.defamation_risk ?? 0,
+    platformRisk: risk.platform_risk ?? 0,
+    politicalSensitivity: risk.political_risk ?? risk.politicalSensitivity ?? 0,
+    overallScore: risk.overall_score ?? risk.overallScore ?? 0,
+  };
+
+  const factors: RiskFactors = risk.factors || risk.riskFactors || risk.risk_factors || {
+    namedIndividual: false,
+    criminalAllegation: false,
+    singleAnonymousSource: false,
+    electionPeriod: false,
+    warTopic: false,
+    religiousFraming: false,
+    ethnicTension: false,
+    activeConflict: false,
+    terrorismDesignation: false,
+    israelMentioned: false,
+    iranMentioned: false,
+    palestineMentioned: false,
+    usMilitaryInvolved: false,
+  };
+
+  return {
+    ...risk,
+    scores,
+    factors,
+    riskFactors: risk.riskFactors || factors,
+  };
+};
+
 const initialState: Partial<AppState> = {
   contents: [] as ContentItem[],
   currentContent: null,
@@ -306,8 +341,9 @@ export const useAppStore = create<AppState>()(
 
       // Risk Actions
       addRiskAssessment: (assessment: RiskAssessment) => {
+        const normalized = normalizeRiskAssessment(assessment);
         set((state: AppState) => ({
-          riskAssessments: [assessment, ...state.riskAssessments],
+          riskAssessments: [normalized, ...state.riskAssessments],
         }));
       },
 
@@ -474,14 +510,13 @@ export const useAppStore = create<AppState>()(
       fetchAllData: async () => {
         set({ isFetching: true });
         try {
-          // Add auto-login for dev environment if token is missing
           if (!localStorage.getItem('token')) {
             console.log('No token found, attempting auto-login...');
             await api.login();
           }
 
-          // Fetch all critical data in parallel
-          const [sources, contents, _stats, eri, history, risk, health, videoStatus, profiles, campaigns] = await Promise.all([
+          // Fetch all data, but handle individual failures gracefully
+          const fetchResults = await Promise.allSettled([
             api.getDataSources(),
             api.getContents(),
             api.getDashboardStats(),
@@ -491,22 +526,37 @@ export const useAppStore = create<AppState>()(
             api.getSystemHealth(),
             api.getVideoPipelineStatus(),
             api.getProfiles(),
-            api.getCampaigns()
+            api.getCampaigns(),
+            api.getAutomationSchedules()
           ]);
- 
+
+          const [sources, contents, _stats, eri, history, risk, health, videoStatus, profiles, campaigns, schedules] = fetchResults;
+          const normalizedRiskAssessments =
+            risk.status === 'fulfilled'
+              ? (risk.value as any[]).map(normalizeRiskAssessment)
+              : [];
+
           set({
-            dataSources: sources as DataSource[],
-            contents: (contents as any[]).map(mapArticleToContentItem),
-            currentERI: eri as ERIAssessment,
-            eriHistory: history as ERIAssessment[],
-            riskAssessments: risk as RiskAssessment[],
-            systemHealth: health as SystemHealth,
-            videoPipelineStatus: videoStatus as VideoPipelineStatus,
-            automationSchedules: await api.getAutomationSchedules() as AutomationSchedule[],
-            profiles: profiles as any[],
-            campaigns: campaigns as any[],
+            dataSources: sources.status === 'fulfilled' ? sources.value : [],
+            contents: contents.status === 'fulfilled' ? (contents.value as any[]).map(mapArticleToContentItem) : [],
+            currentERI: eri.status === 'fulfilled' ? eri.value : null,
+            eriHistory: history.status === 'fulfilled' ? (history.value as any[]) : [],
+            riskAssessments: normalizedRiskAssessments,
+            systemHealth: health.status === 'fulfilled' ? health.value : initialState.systemHealth,
+            videoPipelineStatus: videoStatus.status === 'fulfilled' ? videoStatus.value : null,
+            automationSchedules: schedules.status === 'fulfilled' ? (schedules.value as any[]) : [],
+            profiles: profiles.status === 'fulfilled' ? (profiles.value as any[]) : [],
+            campaigns: campaigns.status === 'fulfilled' ? (campaigns.value as any[]) : [],
             isFetching: false
           });
+
+          // Log failures for debugging
+          fetchResults.forEach((result, index) => {
+            if (result.status === 'rejected') {
+              console.warn(`Parallel fetch item ${index} failed:`, result.reason);
+            }
+          });
+
         } catch (error) {
           console.error('Failed to fetch data:', error);
           set({ isFetching: false });
