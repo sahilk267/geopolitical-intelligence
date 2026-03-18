@@ -62,9 +62,13 @@ class VideoRenderService:
         profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Render a high-quality short clip with:
-        - Image B-roll (zoom/pan transitions)
-        - Dynamic synchronized captions
+        Render a professional YouTube-quality short clip with:
+        - Ken Burns effect on B-roll images
+        - Dark gradient overlay for text readability
+        - Headline title card (first 3 seconds)
+        - Snappy 2-3 word captions with keyword highlighting
+        - Animated progress bar
+        - Branding watermark
         - Background music mixing
         """
         if not self._check_ffmpeg():
@@ -83,35 +87,125 @@ class VideoRenderService:
         if duration <= 0:
             duration = 30
 
-        # 2. Build Video Filter (Images + Zoom/Pan)
+        # 2. Build Video Filter (Images with Ken Burns + Dark Gradient)
         video_filters = []
         inputs = []
+        font_path = self._find_font()
+        font_spec = f":fontfile='{font_path}'" if font_path else ""
         
+        # Sanitize headline for FFmpeg
+        import re
+        safe_headline = re.sub(r"['\";\\()\[\]{}]", "", headline)
+        safe_headline = safe_headline.replace(":", "\\:")
+        safe_headline = safe_headline.replace(",", "\\,")
+        safe_headline = safe_headline.replace("%", "%%")
+        # Wrap headline if too long
+        if len(safe_headline) > 30:
+            mid = len(safe_headline) // 2
+            split_idx = safe_headline.find(" ", mid - 5)
+            if split_idx != -1:
+                hl_line1 = safe_headline[:split_idx]
+                hl_line2 = safe_headline[split_idx + 1:]
+            else:
+                hl_line1 = safe_headline
+                hl_line2 = ""
+        else:
+            hl_line1 = safe_headline
+            hl_line2 = ""
+
         if image_paths:
-            # Multi-image B-roll with crossfade
             per_image_duration = duration / len(image_paths)
             for i, img in enumerate(image_paths):
                 inputs.extend(["-loop", "1", "-t", str(per_image_duration + 1), "-i", img])
-                # Ken Burns effect (Subtle zoom)
+                # Ken Burns: gentle zoom with pan
+                zoom_dir = "min(zoom+0.0012,1.3)" if i % 2 == 0 else "if(eq(on,1),1.3,max(zoom-0.0012,1.0))"
                 video_filters.append(
-                    f"[{i}:v]scale=1920:-1,crop=1080:1920,"
-                    f"zoompan=z='min(zoom+0.0015,1.5)':d={int((per_image_duration+1)*30)}:s=1080x1920:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'[v{i}];"
+                    f"[{i}:v]scale=2160:-1,crop=1080:1920,"
+                    f"zoompan=z='{zoom_dir}':d={int((per_image_duration+1)*30)}:s=1080x1920"
+                    f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30[v{i}];"
                 )
             
             # Concatenate images
             concat_filter = "".join([f"[v{i}]" for i in range(len(image_paths))])
-            video_filters.append(f"{concat_filter}concat=n={len(image_paths)}:v=1:a=0[bgv];")
+            video_filters.append(f"{concat_filter}concat=n={len(image_paths)}:v=1:a=0[rawbg];")
+            
+            # Apply dark gradient overlay for text readability
+            # Bottom 60% gradient from transparent to semi-dark
+            video_filters.append(
+                f"[rawbg]drawbox=x=0:y=ih*0.4:w=iw:h=ih*0.6:color=black@0.55:t=fill,"
+                # Top gradient bar
+                f"drawbox=x=0:y=0:w=iw:h=ih*0.15:color=black@0.5:t=fill[bgv];"
+            )
         else:
-            # Fallback to solid color
+            # Fallback to gradient dark background
             inputs.extend(["-f", "lavfi", "-i", f"color=c={bg_color}:s=1080x1920:d={duration}:r=30"])
             video_filters.append("[0:v]null[bgv];")
 
-        # 3. Dynamic Captions (Timed text blocks)
-        caption_filter_inner = self._create_caption_filter(script_text or headline, duration, txt_color)
-        if caption_filter_inner:
-            full_video_filter = "".join(video_filters) + f"[bgv]{caption_filter_inner}[out_v];"
-        else:
-            full_video_filter = "".join(video_filters) + f"[bgv]null[out_v];"
+        # 3. Build overlay layers: title card + captions + progress bar + branding
+        overlay_filters = []
+        
+        # ── Title Card (first 3 seconds) ──
+        title_duration = min(3.0, duration * 0.15)
+        # Top label "BREAKING NEWS" or "INTELLIGENCE REPORT"
+        overlay_filters.append(
+            f"drawtext=text='INTELLIGENCE REPORT':fontcolor=#C7A84A:fontsize=32{font_spec}"
+            f":x=(w-text_w)/2:y=250"
+            f":borderw=2:bordercolor=black"
+            f":enable='between(t,0,{title_duration:.2f})'"
+        )
+        # Headline line 1 (large, bold)
+        overlay_filters.append(
+            f"drawtext=text='{hl_line1}':fontcolor=white:fontsize=56{font_spec}"
+            f":x=(w-text_w)/2:y=(h/2)-60"
+            f":borderw=3:bordercolor=black"
+            f":shadowcolor=black@0.8:shadowx=4:shadowy=4"
+            f":enable='between(t,0,{title_duration:.2f})'"
+        )
+        # Headline line 2 (if exists)
+        if hl_line2:
+            overlay_filters.append(
+                f"drawtext=text='{hl_line2}':fontcolor=white:fontsize=56{font_spec}"
+                f":x=(w-text_w)/2:y=(h/2)+10"
+                f":borderw=3:bordercolor=black"
+                f":shadowcolor=black@0.8:shadowx=4:shadowy=4"
+                f":enable='between(t,0,{title_duration:.2f})'"
+            )
+        # Divider line under title
+        overlay_filters.append(
+            f"drawbox=x=(w-400)/2:y=(h/2)+80:w=400:h=3:color=#C7A84A:t=fill"
+            f":enable='between(t,0.3,{title_duration:.2f})'"
+        )
+
+        # ── Snappy Captions (after title card) ──
+        caption_filters = self._create_caption_filter(
+            script_text or headline, duration, txt_color, title_duration
+        )
+        if caption_filters:
+            overlay_filters.append(caption_filters)
+
+        # ── Animated Progress Bar (bottom) ──
+        overlay_filters.append(
+            f"drawbox=x=0:y=h-8:w=iw:h=8:color=white@0.15:t=fill,"
+            f"drawbox=x=0:y=h-8:w='iw*t/{duration:.2f}':h=8:color=#C7A84A:t=fill"
+        )
+
+        # ── Branding Watermark ──
+        overlay_filters.append(
+            f"drawtext=text='@StrategicContext':fontcolor=white@0.85:fontsize=28{font_spec}"
+            f":x=(w-text_w)/2:y=h-60"
+            f":box=1:boxcolor=black@0.5:boxborderw=8"
+        )
+
+        # ── Top-left "LIVE" / category badge ──
+        overlay_filters.append(
+            f"drawbox=x=30:y=40:w=80:h=32:color=red@0.9:t=fill,"
+            f"drawtext=text='LIVE':fontcolor=white:fontsize=20{font_spec}"
+            f":x=45:y=45"
+        )
+
+        # Combine all overlay filters
+        all_overlays = ",".join(overlay_filters)
+        full_video_filter = "".join(video_filters) + f"[bgv]{all_overlays}[out_v];"
 
         # 4. Audio Mixing (TTS + Background Music)
         audio_input_idx = len(image_paths) if image_paths else 1
@@ -121,7 +215,7 @@ class VideoRenderService:
         if music_path and os.path.exists(music_path):
             music_idx = audio_input_idx + 1
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
-            mix_filter += f"[{music_idx}:a]volume=0.15,apad[bg_a]; [main_a][bg_a]amix=inputs=2:duration=first[out_a]"
+            mix_filter += f"[{music_idx}:a]volume=0.12,apad[bg_a]; [main_a][bg_a]amix=inputs=2:duration=first[out_a]"
         else:
             mix_filter += f"[main_a]anull[out_a]"
 
@@ -134,8 +228,8 @@ class VideoRenderService:
             "-map", "[out_v]",
             "-map", "[out_a]",
             "-c:v", "libx264", "-preset", "veryfast",
-            "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
+            "-crf", "20",
+            "-c:a", "aac", "-b:a", "192k",
             "-shortest",
             "-pix_fmt", "yuv420p",
             output_path,
@@ -162,58 +256,68 @@ class VideoRenderService:
         except Exception as e:
             return {"error": str(e)}
 
-    def _create_caption_filter(self, text: str, total_duration: float, color: str) -> str:
-        """Create a series of drawtext filters for timed captions."""
+    def _create_caption_filter(self, text: str, total_duration: float, color: str, start_offset: float = 0.0) -> str:
+        """Create professional snappy caption filters with keyword highlighting."""
         import re
 
-        # Split text into phrases of ~5-7 words
+        # Split text into snappy 2-3 word phrases
         words = text.split()
         phrases = []
         current_phrase = []
         for word in words:
             current_phrase.append(word)
-            if len(current_phrase) >= 6:
+            if len(current_phrase) >= 3 or word.endswith(('.', ',', '!', '?')):
                 phrases.append(" ".join(current_phrase))
                 current_phrase = []
         if current_phrase:
             phrases.append(" ".join(current_phrase))
             
         if not phrases:
-            return "null"
+            return ""
 
-        phrase_duration = total_duration / len(phrases)
+        # Captions start after the title card
+        caption_duration = total_duration - start_offset
+        if caption_duration <= 0:
+            caption_duration = total_duration
+            start_offset = 0
+            
+        phrase_duration = caption_duration / len(phrases)
         filters = []
         font_path = self._find_font()
         font_spec = f":fontfile='{font_path}'" if font_path else ""
         
-        for i, phrase in enumerate(phrases):
-            start = i * phrase_duration
-            end = (i + 1) * phrase_duration
+        # Impact keywords for yellow highlighting
+        highlight_keywords = {
+            "conflict", "surge", "ceasefire", "attack", "crisis", "war",
+            "strike", "escalation", "missile", "rebel", "military",
+            "agreement", "deal", "threat", "sanctions", "nuclear",
+            "troops", "invasion", "bombing", "killed", "tension"
+        }
 
-            # Aggressively sanitize text for FFmpeg drawtext
-            # Remove characters that break the filter_complex parser
+        for i, phrase in enumerate(phrases):
+            start = start_offset + i * phrase_duration
+            end = start_offset + (i + 1) * phrase_duration
+
+            # Dynamic color highlighting
+            phrase_lower = phrase.lower()
+            is_highlighted = any(k in phrase_lower for k in highlight_keywords)
+            dynamic_color = "#FFD700" if is_highlighted else color
+
+            # Sanitize text for FFmpeg drawtext
             safe_phrase = re.sub(r"['\";\\()\[\]{}]", "", phrase)
             safe_phrase = safe_phrase.replace(":", "\\:")
             safe_phrase = safe_phrase.replace("%", "%%")
             safe_phrase = safe_phrase.replace(",", "\\,")
 
-            lines = [safe_phrase]
-            if len(safe_phrase) > 25:
-                mid = len(safe_phrase) // 2
-                split_idx = safe_phrase.find(" ", mid-5)
-                if split_idx != -1:
-                    lines = [safe_phrase[:split_idx], safe_phrase[split_idx+1:]]
-
-            # Render each line with specific Y offsets
-            y_offsets = [0] if len(lines) == 1 else [-35, 35]
-            for line_idx, line_text in enumerate(lines):
-                y_val = 200 + y_offsets[line_idx]
-                filters.append(
-                    f"drawtext=text='{line_text}':fontcolor={color}:fontsize=64{font_spec}"
-                    f":x=(w-text_w)/2:y=(h-text_h)/2+{y_val}"
-                    f":borderw=3:bordercolor=black"
-                    f":enable='between(t,{start:.2f},{end:.2f})'"
-                )
+            # Caption text — centered, large, bold
+            font_size = 80 if is_highlighted else 72
+            filters.append(
+                f"drawtext=text='{safe_phrase}':fontcolor={dynamic_color}:fontsize={font_size}{font_spec}"
+                f":x=(w-text_w)/2:y=(h*0.65)"
+                f":borderw=5:bordercolor=black"
+                f":shadowcolor=black@0.9:shadowx=4:shadowy=4"
+                f":enable='between(t,{start:.2f},{end:.2f})'"
+            )
             
         return ",".join(filters)
 

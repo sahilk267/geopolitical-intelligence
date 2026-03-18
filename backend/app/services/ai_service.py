@@ -258,6 +258,7 @@ Return ONLY valid JSON, no markdown fences or extra text."""
         content_text = (content or "")[:2000]
         prompt = f"""You are a {persona_style}. Create a 30-second narration script (approximately 75 words) for a short video clip.
 The script should be punchy, engaging, and authoritative.
+CRITICAL REQUIREMENT: The final sentence MUST be an engaging Call to Action (CTA) asking the viewer a question to drive comments (e.g., "What do you think about this? Let us know below!").
 
 Topic: {headline}
 Content: {content_text}
@@ -446,21 +447,23 @@ Return ONLY valid JSON."""
                         await asyncio.sleep(2 ** attempt) # Exponential backoff
             logger.warning("All SD.Next retry attempts failed, falling back to cloud.")
 
-        # 2. Fallback to Pollinations.ai (Free Cloud)
-        encoded_prompt = quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+        # 2. Fallback to Picsum.photos (Free, reliable stock photos)
+        # Use hash of the prompt as seed for deterministic variety per topic
+        import hashlib
+        seed = hashlib.md5(prompt.encode()).hexdigest()[:10]
+        url = f"https://picsum.photos/seed/{seed}/1080/1920"
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 response = await client.get(url)
-                if response.status_code == 200:
+                if response.status_code == 200 and len(response.content) > 1000:
                     with open(output_path, "wb") as f:
                         f.write(response.content)
-                    logger.info(f"Generated cloud image via Pollinations.ai for: {prompt[:50]}...")
+                    logger.info(f"Generated fallback image via Picsum for seed: {seed}")
                     return output_path
             return None
         except Exception as e:
-            logger.error(f"Cloud image generation failed for '{prompt}': {e}")
+            logger.error(f"Picsum image generation failed: {e}")
             return None
 
 

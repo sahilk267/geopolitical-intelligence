@@ -34,7 +34,7 @@ async def run_full_pipeline(
     generate_presenter: bool = True,
     distribute_to: Optional[List[str]] = None,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(UserRole.JUNIOR_EDITOR)),
+    current_user=Depends(get_current_active_user),
 ):
     """
     Run the complete pipeline for a category.
