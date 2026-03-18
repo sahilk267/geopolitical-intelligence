@@ -281,7 +281,6 @@ class VideoRenderService:
             caption_duration = total_duration
             start_offset = 0
             
-        phrase_duration = caption_duration / len(phrases)
         filters = []
         font_path = self._find_font()
         font_spec = f":fontfile='{font_path}'" if font_path else ""
@@ -294,9 +293,17 @@ class VideoRenderService:
             "troops", "invasion", "bombing", "killed", "tension"
         }
 
+        # Calculate character density for perfect audio sync
+        total_weight = sum(len(p) + 4 for p in phrases) # +4 base weight per phrase
+        current_time = start_offset
+
         for i, phrase in enumerate(phrases):
-            start = start_offset + i * phrase_duration
-            end = start_offset + (i + 1) * phrase_duration
+            phrase_weight = len(phrase) + 4
+            phrase_duration = caption_duration * (phrase_weight / total_weight)
+            
+            start = current_time
+            end = current_time + phrase_duration
+            current_time = end
 
             # Dynamic color highlighting
             phrase_lower = phrase.lower()
@@ -309,8 +316,13 @@ class VideoRenderService:
             safe_phrase = safe_phrase.replace("%", "%%")
             safe_phrase = safe_phrase.replace(",", "\\,")
 
-            # Caption text — centered, large, bold
+            # Dynamic font scaling to prevent overflow
             font_size = 80 if is_highlighted else 72
+            if len(safe_phrase) > 20:
+                font_size = 50
+            elif len(safe_phrase) > 15:
+                font_size = 60
+
             filters.append(
                 f"drawtext=text='{safe_phrase}':fontcolor={dynamic_color}:fontsize={font_size}{font_spec}"
                 f":x=(w-text_w)/2:y=(h*0.65)"

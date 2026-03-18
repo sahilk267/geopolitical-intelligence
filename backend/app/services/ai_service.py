@@ -447,23 +447,30 @@ Return ONLY valid JSON."""
                         await asyncio.sleep(2 ** attempt) # Exponential backoff
             logger.warning("All SD.Next retry attempts failed, falling back to cloud.")
 
-        # 2. Fallback to Picsum.photos (Free, reliable stock photos)
-        # Use hash of the prompt as seed for deterministic variety per topic
+        # 2. Fallback to LoremFlickr (Context-aware stock photos)
+        # Extract 2 main keywords from the prompt for relevance
+        import re
         import hashlib
-        seed = hashlib.md5(prompt.encode()).hexdigest()[:10]
-        url = f"https://picsum.photos/seed/{seed}/1080/1920"
+        words = re.findall(r'\b[a-zA-Z]{4,}\b', prompt.lower())
+        stop_words = {'generate', 'image', 'showing', 'about', 'with', 'that', 'this', 'cinematic', 'wide', 'shot'}
+        keywords = [w for w in words if w not in stop_words][:2]
+        keyword_str = ",".join(keywords) if keywords else "news,world"
+        
+        # Use hash as random seed to avoid caching identical images
+        seed = hashlib.md5(prompt.encode()).hexdigest()[:8]
+        url = f"https://loremflickr.com/1080/1920/{keyword_str}?lock={int(seed, 16) % 10000}"
         
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 response = await client.get(url)
-                if response.status_code == 200 and len(response.content) > 1000:
+                if response.status_code == 200 and len(response.content) > 5000:
                     with open(output_path, "wb") as f:
                         f.write(response.content)
-                    logger.info(f"Generated fallback image via Picsum for seed: {seed}")
+                    logger.info(f"Generated fallback image via LoremFlickr for keywords: {keyword_str}")
                     return output_path
             return None
         except Exception as e:
-            logger.error(f"Picsum image generation failed: {e}")
+            logger.error(f"LoremFlickr image generation failed: {e}")
             return None
 
 
