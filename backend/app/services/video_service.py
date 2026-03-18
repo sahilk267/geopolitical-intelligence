@@ -35,6 +35,21 @@ class VideoRenderService:
             logger.error("FFmpeg not found. Install it: apt-get install ffmpeg")
             return False
 
+    def _find_font(self) -> str:
+        """Find a usable TrueType font. Returns path or empty string."""
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+        ]
+        for font in candidates:
+            if os.path.exists(font):
+                return font
+        logger.warning("No TrueType font found, captions will use FFmpeg default")
+        return ""
+
     async def render_short_clip(
         self,
         audio_path: str,
@@ -108,7 +123,7 @@ class VideoRenderService:
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
             mix_filter += f"[{music_idx}:a]volume=0.15,apad[bg_a]; [main_a][bg_a]amix=inputs=2:duration=first[out_a]"
         else:
-            mix_filter += f"[main_a]copy[out_a]"
+            mix_filter += f"[main_a]anull[out_a]"
 
         # Full FFmpeg Command
         cmd = [
@@ -150,7 +165,7 @@ class VideoRenderService:
     def _create_caption_filter(self, text: str, total_duration: float, color: str) -> str:
         """Create a series of drawtext filters for timed captions."""
         import re
-        
+
         # Split text into phrases of ~5-7 words
         words = text.split()
         phrases = []
@@ -168,25 +183,37 @@ class VideoRenderService:
 
         phrase_duration = total_duration / len(phrases)
         filters = []
+        font_path = self._find_font()
+        font_spec = f":fontfile='{font_path}'" if font_path else ""
         
         for i, phrase in enumerate(phrases):
             start = i * phrase_duration
             end = (i + 1) * phrase_duration
-            # Escape text for FFmpeg
-            safe_phrase = phrase.replace("'", "'\\''").replace(":", "\\:")
-            # Wrap lines if too long
+
+            # Aggressively sanitize text for FFmpeg drawtext
+            # Remove characters that break the filter_complex parser
+            safe_phrase = re.sub(r"['\";\\()\[\]{}]", "", phrase)
+            safe_phrase = safe_phrase.replace(":", "\\:")
+            safe_phrase = safe_phrase.replace("%", "%%")
+            safe_phrase = safe_phrase.replace(",", "\\,")
+
+            lines = [safe_phrase]
             if len(safe_phrase) > 25:
                 mid = len(safe_phrase) // 2
                 split_idx = safe_phrase.find(" ", mid-5)
                 if split_idx != -1:
-                    safe_phrase = safe_phrase[:split_idx] + "\\\\n" + safe_phrase[split_idx+1:]
+                    lines = [safe_phrase[:split_idx], safe_phrase[split_idx+1:]]
 
-            filters.append(
-                f"drawtext=text='{safe_phrase}':fontcolor={color}:fontsize=64:fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'"
-                f":x=(w-text_w)/2:y=(h-text_h)/2+200"
-                f":borderw=3:bordercolor=black"
-                f":enable='between(t,{start:.2f},{end:.2f})'"
-            )
+            # Render each line with specific Y offsets
+            y_offsets = [0] if len(lines) == 1 else [-35, 35]
+            for line_idx, line_text in enumerate(lines):
+                y_val = 200 + y_offsets[line_idx]
+                filters.append(
+                    f"drawtext=text='{line_text}':fontcolor={color}:fontsize=64{font_spec}"
+                    f":x=(w-text_w)/2:y=(h-text_h)/2+{y_val}"
+                    f":borderw=3:bordercolor=black"
+                    f":enable='between(t,{start:.2f},{end:.2f})'"
+                )
             
         return ",".join(filters)
 

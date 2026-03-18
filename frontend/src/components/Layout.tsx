@@ -65,7 +65,6 @@ export function Layout() {
     }
   };
 
-  console.log('Rendering Layout, activeTab:', activeTab);
 
   return (
     <div className="flex h-screen bg-[#0a0f1a] text-slate-200 overflow-hidden">

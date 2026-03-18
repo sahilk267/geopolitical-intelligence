@@ -169,7 +169,10 @@ class PipelineService:
                     presenter_image=presenter_image
                 )
                 
-                if "error" in avatar_result:
+                if avatar_result.get("skipped"):
+                    logger.info(f"Avatar generation skipped: {avatar_result.get('reason', 'Engine not available')}")
+                    pipeline_result["steps"]["avatar"] = {"status": "skipped", "reason": avatar_result.get("reason", "")}
+                elif "error" in avatar_result:
                     logger.warning(f"Avatar generation failed: {avatar_result['error']}")
                     pipeline_result["errors"].append(f"Avatar: {avatar_result['error']}")
                     pipeline_result["steps"]["avatar"] = {"status": "failed"}

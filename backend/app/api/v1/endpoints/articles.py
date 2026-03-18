@@ -36,7 +36,7 @@ router = APIRouter()
 async def create_article(
     article_in: ArticleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.JUNIOR_EDITOR))
+    current_user: User = Depends(get_current_active_user)
 ):
     """Create a new normalized article manually."""
     db_article = NormalizedArticle(

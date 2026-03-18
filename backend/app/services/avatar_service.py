@@ -16,6 +16,7 @@ from typing import Optional, Dict, Any
 
 from app.core.config import settings
 from app.core.http_client import http_client
+from app.utils.path_utils import resolve_sadtalker_dir, running_in_docker
 
 logger = logging.getLogger(__name__)
 
@@ -73,29 +74,35 @@ class AvatarService:
         self, audio_path: str, presenter_image: str
     ) -> Dict[str, Any]:
         """Generate a lip-synced video using local SadTalker installation."""
-        sadtalker_root = os.path.abspath(self.sadtalker_dir)
+        sadtalker_root, override_used, _ = resolve_sadtalker_dir(
+            self.sadtalker_dir,
+            settings.SADTALKER_DOCKER_PATH
+        )
         inference_script = os.path.join(sadtalker_root, "inference.py")
         checkpoint_dir = os.path.join(sadtalker_root, "checkpoints")
+
+        if override_used:
+            logger.info(f"SadTalker root resolved to {sadtalker_root} (override applied)")
         # venv_python = os.path.join(sadtalker_root, "venv", "Scripts", "python.exe")
 
         # Validate installation
         if not os.path.exists(inference_script):
-            logger.error(f"SadTalker not found at {sadtalker_root}. Please install it.")
+            logger.warning(f"SadTalker not found at {sadtalker_root}. Avatar generation skipped.")
             return {
-                "error": f"SadTalker not installed at {sadtalker_root}. Run the setup guide.",
-                "fallback": True,
+                "skipped": True,
+                "reason": f"SadTalker not installed at {sadtalker_root}. Mount it in docker-compose.yml.",
             }
 
         if not os.path.exists(checkpoint_dir):
-            logger.error(f"SadTalker checkpoints not found at {checkpoint_dir}.")
+            logger.warning(f"SadTalker checkpoints not found at {checkpoint_dir}. Avatar generation skipped.")
             return {
-                "error": "SadTalker checkpoints missing. Download them to the checkpoints/ folder.",
-                "fallback": True,
+                "skipped": True,
+                "reason": "SadTalker checkpoints missing. Download them to the checkpoints/ folder.",
             }
 
         # Determine the Python executable
         python_exe = "python"  # Default in Docker/Linux
-        if not os.path.exists("/.dockerenv"):
+        if not running_in_docker():
             # Only use Windows-style venv path if NOT in Docker
             venv_python = os.path.join(sadtalker_root, "venv", "Scripts", "python.exe")
             if os.path.exists(venv_python):
@@ -106,7 +113,7 @@ class AvatarService:
         abs_image = presenter_image
         abs_audio = audio_path
 
-        if os.path.exists("/.dockerenv"):
+        if running_in_docker():
             if abs_image.startswith("C:") or abs_image.startswith("\\"):
                 # Fallback for Docker: assumes host ./backend/assets/presenter.png is mounted to /app/assets/...
                 # or just use the filename if it's already in the expected structure

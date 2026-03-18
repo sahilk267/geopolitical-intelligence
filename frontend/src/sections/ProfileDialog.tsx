@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,6 +87,9 @@ export function ProfileDialog({ open, onOpenChange, profile }: ProfileDialogProp
             <UserSquare className="w-5 h-5 text-[#C7A84A]" />
             {profile ? 'Edit Persona' : 'Create New Persona'}
           </DialogTitle>
+          <DialogDescription className="text-slate-400">
+            Configure persona identity, voice settings, and distribution credentials.
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6 py-4">

@@ -11,7 +11,6 @@ import type { ContentItem } from '@/types';
 
 export function NewContentDialog() {
     const { createDialogOpen, setCreateDialogOpen, addContent } = useAppStore();
-    console.log('NewContentDialog rendered, open:', createDialogOpen);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 

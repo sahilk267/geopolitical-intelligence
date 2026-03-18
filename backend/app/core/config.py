@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     # Avatar / Lip-Sync
     AVATAR_ENGINE: str = "local"  # "local" (SadTalker), "did", or "heygen"
     SADTALKER_DIR: str = "../sadtalker"  # Path to SadTalker installation
+    SADTALKER_DOCKER_PATH: str = "/app/sadtalker"
     DID_API_KEY: Optional[str] = None
     HEYGEN_API_KEY: Optional[str] = None
     DEFAULT_PRESENTER_IMAGE: str = "./assets/presenter.png"
