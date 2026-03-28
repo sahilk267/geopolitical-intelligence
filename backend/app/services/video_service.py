@@ -6,6 +6,7 @@ import os
 import uuid
 import logging
 import subprocess
+import re
 import json
 from typing import Optional, Dict, Any, List
 
@@ -60,16 +61,20 @@ class VideoRenderService:
         text_color: str = "white",
         music_path: Optional[str] = None,
         profile: Optional[Dict[str, Any]] = None,
+        scenes: Optional[List[Dict[str, Any]]] = None,
+        sentiment: str = "stable"
     ) -> Dict[str, Any]:
         """
         Render a professional YouTube-quality short clip with:
+        - Multi-scene Documentary Style
+        - Scene-specific images and overlays
+        - Sentiment-based color grading
         - Ken Burns effect on B-roll images
         - Dark gradient overlay for text readability
         - Headline title card (first 3 seconds)
         - Snappy 2-3 word captions with keyword highlighting
         - Animated progress bar
         - Branding watermark
-        - Background music mixing
         """
         if not self._check_ffmpeg():
             return {"error": "FFmpeg not available"}
@@ -77,154 +82,153 @@ class VideoRenderService:
         filename = f"short_{uuid.uuid4().hex[:12]}.mp4"
         output_path = os.path.join(self.short_clip_dir, filename)
 
-        # 0. Profile Style Overrides
+        # 0. Style and Timing
         style = profile.get("video_style", {}) if profile else {}
         bg_color = style.get("backgroundColor", background_color)
         txt_color = style.get("textColor", text_color)
-
-        # 1. Calculate timing
         duration = self._get_media_duration(audio_path)
-        if duration <= 0:
-            duration = 30
-
-        # 2. Build Video Filter (Images with Ken Burns + Dark Gradient)
+        if duration <= 0: duration = 30
+        
+        # 1. Prepare Scenes and Normalization
+        if not scenes:
+            scenes = [{"voiceover": script_text or headline, "duration_seconds": duration, "overlay_text": headline}]
+        
+        # Normalize scene durations to actual audio length
+        total_requested = sum(s.get("duration_seconds", 5) for s in scenes)
+        
+        # 2. Build Video Filter (Images with Ken Burns)
         video_filters = []
         inputs = []
         font_path = self._find_font()
         font_spec = f":fontfile='{font_path}'" if font_path else ""
         
-        # Sanitize headline for FFmpeg
-        import re
-        safe_headline = re.sub(r"['\";\\()\[\]{}]", "", headline)
-        safe_headline = safe_headline.replace(":", "\\:")
-        safe_headline = safe_headline.replace(",", "\\,")
-        safe_headline = safe_headline.replace("%", "%%")
-        # Wrap headline if too long
-        if len(safe_headline) > 30:
-            mid = len(safe_headline) // 2
-            split_idx = safe_headline.find(" ", mid - 5)
-            if split_idx != -1:
-                hl_line1 = safe_headline[:split_idx]
-                hl_line2 = safe_headline[split_idx + 1:]
-            else:
-                hl_line1 = safe_headline
-                hl_line2 = ""
-        else:
-            hl_line1 = safe_headline
-            hl_line2 = ""
-
-        if image_paths:
-            per_image_duration = duration / len(image_paths)
-            for i, img in enumerate(image_paths):
-                inputs.extend(["-loop", "1", "-t", str(per_image_duration + 1), "-i", img])
-                # Ken Burns: gentle zoom with pan
-                zoom_dir = "min(zoom+0.0012,1.3)" if i % 2 == 0 else "if(eq(on,1),1.3,max(zoom-0.0012,1.0))"
+        for i, scene in enumerate(scenes):
+            # Pick image for this scene (looping if needed)
+            img_idx = i % len(image_paths) if image_paths else -1
+            img = image_paths[img_idx] if img_idx >= 0 else None
+            
+            # Scene timing
+            scene_raw_dur = scene.get("duration_seconds", 5)
+            scene_duration = (scene_raw_dur / total_requested) * duration
+            
+            if img:
+                inputs.extend(["-loop", "1", "-t", f"{scene_duration:.2f}", "-i", img])
+                # Ken Burns effect specific to scene
+                zoom_dir = "min(zoom+0.001,1.3)" if i % 2 == 0 else "if(eq(on,1),1.3,max(zoom-0.001,1.0))"
                 video_filters.append(
                     f"[{i}:v]scale=2160:-1,crop=1080:1920,"
-                    f"zoompan=z='{zoom_dir}':d={int((per_image_duration+1)*30)}:s=1080x1920"
-                    f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30[v{i}];"
+                    f"zoompan=z='{zoom_dir}':d={int(scene_duration*30)}:s=1080x1920"
+                    f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':fps=30[v{i}]"
                 )
-            
-            # Concatenate images
-            concat_filter = "".join([f"[v{i}]" for i in range(len(image_paths))])
-            video_filters.append(f"{concat_filter}concat=n={len(image_paths)}:v=1:a=0[rawbg];")
-            
-            # Apply dark gradient overlay for text readability
-            # Bottom 60% gradient from transparent to semi-dark
-            video_filters.append(
-                f"[rawbg]drawbox=x=0:y=ih*0.4:w=iw:h=ih*0.6:color=black@0.55:t=fill,"
-                # Top gradient bar
-                f"drawbox=x=0:y=0:w=iw:h=ih*0.15:color=black@0.5:t=fill[bgv];"
-            )
-        else:
-            # Fallback to gradient dark background
-            inputs.extend(["-f", "lavfi", "-i", f"color=c={bg_color}:s=1080x1920:d={duration}:r=30"])
-            video_filters.append("[0:v]null[bgv];")
+            else:
+                inputs.extend(["-f", "lavfi", "-i", f"color=c={bg_color}:s=1080x1920:d={scene_duration:.2f}:r=30"])
+                video_filters.append(f"[{i}:v]null[v{i}]")
 
-        # 3. Build overlay layers: title card + captions + progress bar + branding
+        # Concatenate scene clips
+        concat_filter = "".join([f"[v{i}]" for i in range(len(scenes))])
+        video_filters.append(f"{concat_filter}concat=n={len(scenes)}:v=1:a=0[rawbg]")
+
+        # 3. Sentiment-based Color Grading
+        color_grading = "null"
+        if sentiment == "tense":
+            # Desaturate and blue-ish tint
+            color_grading = "eq=saturation=0.7:brightness=-0.05,colorbalance=bt=0.05:mt=0.05"
+        elif sentiment == "hopeful":
+            # Warm and vibrant
+            color_grading = "eq=saturation=1.2:brightness=0.02,colorbalance=rt=0.05:gt=0.02"
+
+        video_filters.append(f"[rawbg]{color_grading}[gradedbg]")
+
+        # 4. Overlays (Gradient + Text)
+        video_filters.append(
+            f"[gradedbg]drawbox=x=0:y=ih*0.4:w=iw:h=ih*0.6:color=black@0.55:t=fill,"
+            f"drawbox=x=0:y=0:w=iw:h=ih*0.15:color=black@0.5:t=fill[bgv]"
+        )
+
         overlay_filters = []
+        title_duration = min(3.0, duration * 0.1)
         
-        # ── Title Card (first 3 seconds) ──
-        title_duration = min(3.0, duration * 0.15)
-        # Top label "BREAKING NEWS" or "INTELLIGENCE REPORT"
+        # ── Title Card (only for first scene) ──
+        safe_headline = re.sub(r"['\";\\()\[\]{}]", "", headline[:50]).replace(":", "\\:").replace(",", "\\,").replace("%", "%%")
         overlay_filters.append(
             f"drawtext=text='INTELLIGENCE REPORT':fontcolor=#C7A84A:fontsize=32{font_spec}"
-            f":x=(w-text_w)/2:y=250"
-            f":borderw=2:bordercolor=black"
-            f":enable='between(t,0,{title_duration:.2f})'"
-        )
-        # Headline line 1 (large, bold)
-        overlay_filters.append(
-            f"drawtext=text='{hl_line1}':fontcolor=white:fontsize=56{font_spec}"
-            f":x=(w-text_w)/2:y=(h/2)-60"
-            f":borderw=3:bordercolor=black"
-            f":shadowcolor=black@0.8:shadowx=4:shadowy=4"
-            f":enable='between(t,0,{title_duration:.2f})'"
-        )
-        # Headline line 2 (if exists)
-        if hl_line2:
-            overlay_filters.append(
-                f"drawtext=text='{hl_line2}':fontcolor=white:fontsize=56{font_spec}"
-                f":x=(w-text_w)/2:y=(h/2)+10"
-                f":borderw=3:bordercolor=black"
-                f":shadowcolor=black@0.8:shadowx=4:shadowy=4"
-                f":enable='between(t,0,{title_duration:.2f})'"
-            )
-        # Divider line under title
-        overlay_filters.append(
-            f"drawbox=x=(w-400)/2:y=(h/2)+80:w=400:h=3:color=#C7A84A:t=fill"
-            f":enable='between(t,0.3,{title_duration:.2f})'"
+            f":x=(w-text_w)/2:y=250:borderw=2:bordercolor=black:enable='between(t,0,{title_duration})',"
+            f"drawtext=text='{safe_headline}':fontcolor=white:fontsize=56{font_spec}"
+            f":x=(w-text_w)/2:y=(h/2)-60:borderw=3:bordercolor=black"
+            f":shadowcolor=black@0.8:shadowx=4:shadowy=4:enable='between(t,0,{title_duration})'"
         )
 
-        # ── Snappy Captions (after title card) ──
-        caption_filters = self._create_caption_filter(
-            script_text or headline, duration, txt_color, title_duration
-        )
-        if caption_filters:
-            overlay_filters.append(caption_filters)
+        # ── Per-Scene Overlays & Captions ──
+        current_time = 3.0 # Start after title
+        for i, scene in enumerate(scenes):
+            scene_dur = (scene.get("duration_seconds", 5) / total_requested) * duration
+            start = current_time
+            end = current_time + scene_dur
+            current_time = end
 
-        # ── Animated Progress Bar (bottom) ──
+            # Scene Overlay Text (Middle-top headline)
+            scene_text = scene.get("overlay_text", "").upper()
+            if scene_text:
+                safe_scene_text = re.sub(r"['\";\\()\[\]{}]", "", scene_text).replace(":", "\\:").replace(",", "\\,")
+                overlay_filters.append(
+                    f"drawtext=text='{safe_scene_text}':fontcolor=#FFD700:fontsize=42{font_spec}"
+                    f":x=(w-text_w)/2:y=350:borderw=3:bordercolor=black"
+                    f":enable='between(t,{start:.2f},{end:.2f})'"
+                )
+
+            # Scene Captions (at bottom)
+            voiceover = scene.get("voiceover", "")
+            if voiceover:
+                caption_f = self._create_caption_filter(voiceover, scene_dur, txt_color, start)
+                if caption_f: overlay_filters.append(caption_f)
+
+        # ── Constant Elements ──
         overlay_filters.append(
+            # Progress Bar
             f"drawbox=x=0:y=h-8:w=iw:h=8:color=white@0.15:t=fill,"
             f"drawbox=x=0:y=h-8:w='iw*t/{duration:.2f}':h=8:color=#C7A84A:t=fill"
         )
-
-        # ── Branding Watermark ──
         overlay_filters.append(
-            f"drawtext=text='@StrategicContext':fontcolor=white@0.85:fontsize=28{font_spec}"
-            f":x=(w-text_w)/2:y=h-60"
-            f":box=1:boxcolor=black@0.5:boxborderw=8"
+            # Branding
+            f"drawtext=text='@StrategicContext':fontcolor=white@0.85:fontsize=28{font_spec}:x=(w-text_w)/2:y=h-60:box=1:boxcolor=black@0.5:boxborderw=8"
+        )
+        overlay_filters.append(
+            # Badge
+            f"drawtext=text='LIVE':fontcolor=white:fontsize=24{font_spec}:x=50:y=50:box=1:boxcolor=red@0.8:boxborderw=10"
         )
 
-        # ── Top-left "LIVE" / category badge ──
+        # Final Glitch Effect (last 0.5s)
         overlay_filters.append(
-            f"drawbox=x=30:y=40:w=80:h=32:color=red@0.9:t=fill,"
-            f"drawtext=text='LIVE':fontcolor=white:fontsize=20{font_spec}"
-            f":x=45:y=45"
+            f"noise=alls=20:allf=t+u:enable='between(t,{duration-0.5:.2f},{duration:.2f})'"
         )
 
-        # Combine all overlay filters
-        all_overlays = ",".join(overlay_filters)
-        full_video_filter = "".join(video_filters) + f"[bgv]{all_overlays}[out_v];"
+        # 5. FFmpeg Command Construction
+        all_overlays_str = ",".join(overlay_filters)
+        # Ensure there is a semicolon before the overlay chain if it's separate, 
+        # or just chain them if bgv is the last filter's output.
+        full_video_filter = ";".join(video_filters) + f";[bgv]{all_overlays_str}[out_v]"
 
         # 4. Audio Mixing (TTS + Background Music)
-        audio_input_idx = len(image_paths) if image_paths else 1
+        # The audio input index will be after all image/color inputs.
+        # Each scene potentially adds one video input.
+        # So, the audio_path input index is len(scenes).
+        audio_input_idx = len(scenes) 
         inputs.extend(["-i", audio_path])
         
-        mix_filter = f"[{audio_input_idx}:a]volume=1.0[main_a];"
+        mix_filter = f";[{audio_input_idx}:a]volume=1.0[main_a]"
         if music_path and os.path.exists(music_path):
-            music_idx = audio_input_idx + 1
+            music_idx = audio_input_idx + 1 # Music input comes after the main audio input
             inputs.extend(["-stream_loop", "-1", "-i", music_path])
-            mix_filter += f"[{music_idx}:a]volume=0.12,apad[bg_a]; [main_a][bg_a]amix=inputs=2:duration=first[out_a]"
+            mix_filter += f";[{music_idx}:a]volume=0.12,apad[bg_a]; [main_a][bg_a]amix=inputs=2:duration=first[out_a]"
         else:
-            mix_filter += f"[main_a]anull[out_a]"
+            mix_filter += f";[main_a]anull[out_a]"
 
         # Full FFmpeg Command
         cmd = [
             "ffmpeg", "-y",
         ] + inputs + [
             "-filter_complex", 
-            full_video_filter + mix_filter,
+            f"{full_video_filter}{mix_filter}",
             "-map", "[out_v]",
             "-map", "[out_a]",
             "-c:v", "libx264", "-preset", "veryfast",

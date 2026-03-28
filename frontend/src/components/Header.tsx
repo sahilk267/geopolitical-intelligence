@@ -17,7 +17,7 @@ import {
 import { getRiskColor, classifyRisk } from '@/lib/riskEngine';
 
 export function Header() {
-  const { currentERI, safeModeEnabled, getDashboardStats, currentUser } = useAppStore();
+  const { currentERI, safeModeEnabled, getDashboardStats, currentUser, logout } = useAppStore();
   const stats = getDashboardStats();
 
   return (
@@ -90,6 +90,9 @@ export function Header() {
             <p className="text-sm font-medium text-white">{currentUser?.name || 'Administrator'}</p>
             <p className="text-xs text-slate-400">{currentUser?.role || 'System Admin'}</p>
           </div>
+          <Button variant="ghost" size="sm" onClick={logout} className="text-slate-400 hover:text-white">
+            Sign out
+          </Button>
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#5A6A7A] to-[#0B1F3A] flex items-center justify-center border border-slate-600">
             <User className="w-4 h-4 text-slate-300" />
           </div>

@@ -2,8 +2,11 @@
 Database Initialization
 """
 import logging
+import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
+from passlib.context import CryptContext
 
+from app.core.config import settings
 from app.db.base import Base, engine
 from app.models import (
     User, Role, UserRole,
@@ -19,6 +22,12 @@ from app.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
 
 async def init_db():
@@ -46,18 +55,29 @@ async def create_initial_data(db: AsyncSession):
     await db.commit()
     logger.info("Default roles created")
     
-    admin_user = User(
-        email="admin@geopolintel.com",
-        username="admin",
-        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGGa31yy",  # admin123
-        full_name="System Administrator",
-        primary_role=UserRole.ADMIN,
-        is_superuser=True,
-        is_active=True,
-    )
-    db.add(admin_user)
-    await db.commit()
-    logger.info("Default admin user created")
+    admin_email = settings.DEFAULT_ADMIN_EMAIL
+    admin_username = settings.DEFAULT_ADMIN_USERNAME or "admin"
+    admin_password = settings.DEFAULT_ADMIN_PASSWORD
+    admin_full_name = settings.DEFAULT_ADMIN_FULL_NAME or "System Administrator"
+
+    if admin_email and admin_password:
+        admin_user = User(
+            email=admin_email,
+            username=admin_username,
+            hashed_password=hash_password(admin_password),
+            full_name=admin_full_name,
+            primary_role=UserRole.ADMIN,
+            is_superuser=True,
+            is_active=True,
+        )
+        db.add(admin_user)
+        await db.commit()
+        logger.info("Default admin user created")
+    else:
+        logger.warning(
+            "No default admin user created because DEFAULT_ADMIN_EMAIL or DEFAULT_ADMIN_PASSWORD is not set. "
+            "Set these values in your .env file to enable initial admin seeding."
+        )
     
     # Create sample sources
     sources = [

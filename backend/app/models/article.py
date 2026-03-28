@@ -16,6 +16,7 @@ from app.db.base import Base
 class ArticleStatus(str, PyEnum):
     """Article processing status."""
     NEW = "new"
+    DRAFT = "draft"
     PENDING_REVIEW = "pending_review"
     NORMALIZED = "normalized"
     FLAGGED = "flagged"
@@ -113,12 +114,17 @@ class NormalizedArticle(Base):
     claims = relationship("Claim", back_populates="article")
     risk_score = relationship("RiskScore", back_populates="article", uselist=False)
     
+    @property
+    def topic(self) -> Optional[str]:
+        return self.category
+
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "headline": self.headline,
             "summary": self.summary[:300] + "..." if self.summary and len(self.summary) > 300 else self.summary,
             "category": self.category,
+            "topic": self.topic,
             "region": self.region,
             "topics": self.topics or [],
             "tags": self.tags or [],

@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, case
 from datetime import datetime, timedelta
 
 from app.db.base import get_db
@@ -27,30 +27,35 @@ async def get_dashboard_stats(
 ):
     """Get dashboard statistics."""
     # Source stats
-    sources_result = await db.execute(select(Source))
-    sources = sources_result.scalars().all()
-    
-    total_sources = len(sources)
-    active_sources = sum(1 for s in sources if s.is_enabled)
-    error_sources = sum(1 for s in sources if s.last_fetch_status == "error")
-    total_items_fetched = sum(s.items_fetched for s in sources)
-    
+    total_sources = await db.scalar(select(func.count(Source.id))) or 0
+    active_sources = await db.scalar(select(func.count(Source.id)).where(Source.is_enabled == True)) or 0
+    error_sources = await db.scalar(select(func.count(Source.id)).where(Source.last_fetch_status == "error")) or 0
+    total_items_fetched = await db.scalar(select(func.coalesce(func.sum(Source.items_fetched), 0))) or 0
+
     # Article stats
-    articles_result = await db.execute(select(NormalizedArticle))
-    articles = articles_result.scalars().all()
-    
-    total_articles = len(articles)
-    pending_review = sum(1 for a in articles if a.status == ArticleStatus.PENDING_REVIEW)
-    published = sum(1 for a in articles if a.status == ArticleStatus.PUBLISHED)
-    flagged = sum(1 for a in articles if a.status == ArticleStatus.FLAGGED)
-    
+    total_articles = await db.scalar(select(func.count(NormalizedArticle.id))) or 0
+    pending_review = await db.scalar(
+        select(func.count(NormalizedArticle.id)).where(NormalizedArticle.status == ArticleStatus.PENDING_REVIEW)
+    ) or 0
+    published = await db.scalar(
+        select(func.count(NormalizedArticle.id)).where(NormalizedArticle.status == ArticleStatus.PUBLISHED)
+    ) or 0
+    flagged = await db.scalar(
+        select(func.count(NormalizedArticle.id)).where(NormalizedArticle.status == ArticleStatus.FLAGGED)
+    ) or 0
+
     # Risk stats
-    risk_result = await db.execute(select(RiskScore))
-    risk_scores = risk_result.scalars().all()
-    
-    avg_risk = sum(r.overall_score for r in risk_scores) / len(risk_scores) if risk_scores else 0
-    high_risk = sum(1 for r in risk_scores if r.overall_score > 60)
-    blocked_by_safe_mode = sum(1 for r in risk_scores if r.safe_mode_blocked)
+    risk_agg = await db.execute(
+        select(
+            func.avg(RiskScore.overall_score),
+            func.sum(case((RiskScore.overall_score > 60, 1), else_=0)),
+            func.sum(case((RiskScore.safe_mode_blocked == True, 1), else_=0)),
+        )
+    )
+    avg_risk, high_risk, blocked_by_safe_mode = risk_agg.one()
+    avg_risk = float(avg_risk or 0)
+    high_risk = int(high_risk or 0)
+    blocked_by_safe_mode = int(blocked_by_safe_mode or 0)
     
     # Latest ERI
     eri_result = await db.execute(
@@ -154,20 +159,30 @@ async def get_pipeline_status(
     current_user: User = Depends(get_current_active_user)
 ):
     """Get content pipeline status."""
-    result = await db.execute(select(NormalizedArticle))
-    articles = result.scalars().all()
-    
-    assessed_article_ids = {score.article_id for score in risk_scores}
+    article_counts = await db.execute(
+        select(
+            func.sum(case((NormalizedArticle.status == ArticleStatus.NEW, 1), else_=0)),
+            func.sum(case((NormalizedArticle.status == ArticleStatus.PENDING_REVIEW, 1), else_=0)),
+            func.sum(case((NormalizedArticle.status == ArticleStatus.APPROVED, 1), else_=0)),
+            func.sum(case((NormalizedArticle.status == ArticleStatus.PUBLISHED, 1), else_=0)),
+        )
+    )
+    ingestion, review, approved, published = article_counts.one()
+
+    unassessed_count = await db.scalar(
+        select(func.count(NormalizedArticle.id))
+        .select_from(
+            NormalizedArticle.outerjoin(RiskScore, NormalizedArticle.id == RiskScore.article_id)
+        )
+        .where(RiskScore.id == None, NormalizedArticle.status != ArticleStatus.NEW)
+    ) or 0
 
     pipeline = {
-        "ingestion": sum(1 for a in articles if a.status == ArticleStatus.NEW),
-        "review": sum(1 for a in articles if a.status == ArticleStatus.PENDING_REVIEW),
-        "risk_assessment": sum(
-            1 for a in articles
-            if a.id not in assessed_article_ids and a.status != ArticleStatus.NEW
-        ),
-        "approved": sum(1 for a in articles if a.status == ArticleStatus.APPROVED),
-        "published": sum(1 for a in articles if a.status == ArticleStatus.PUBLISHED),
+        "ingestion": int(ingestion or 0),
+        "review": int(review or 0),
+        "risk_assessment": int(unassessed_count or 0),
+        "approved": int(approved or 0),
+        "published": int(published or 0),
     }
     
     return pipeline

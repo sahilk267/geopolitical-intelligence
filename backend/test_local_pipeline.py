@@ -18,7 +18,7 @@ import httpx
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 SD_NEXT_URL = os.getenv("STABLE_DIFFUSION_URL", "http://localhost:7860")
-SADTALKER_DIR = os.getenv("SADTALKER_DIR", r"C:\Users\Admin\Downloads\sadtalker")
+SADTALKER_DIR = os.getenv("SADTALKER_DIR", os.path.join(os.path.dirname(__file__), "..", "sadtalker"))
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output", "test_mission")
 MUSIC_PATH = os.path.join(os.path.dirname(__file__), "assets", "music", "cinematic_news.mp3")
 

@@ -1,15 +1,22 @@
 import httpx
 import json
-import time
+import os
+import sys
 
 def test_pipeline():
-    base_url = "http://127.0.0.1:8000/api/v1"
-    
+    base_url = os.getenv("TEST_PIPELINE_BASE_URL", "http://127.0.0.1:8000/api/v1")
+    username = os.getenv("TEST_PIPELINE_USERNAME")
+    password = os.getenv("TEST_PIPELINE_PASSWORD")
+
+    if not username or not password:
+        print("FAILED: TEST_PIPELINE_USERNAME and TEST_PIPELINE_PASSWORD must be set in the environment.")
+        sys.exit(1)
+
     # 1. Login
     print("Logging in...")
     login_data = {
-        "username": "admin@geopolintel.com",
-        "password": "admin123"
+        "username": username,
+        "password": password
     }
     response = httpx.post(f"{base_url}/auth/login", data=login_data)
     if response.status_code != 200:

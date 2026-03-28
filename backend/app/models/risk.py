@@ -124,9 +124,12 @@ class RiskScore(Base):
         return {
             "id": str(self.id),
             "articleId": str(self.article_id),
+            "contentId": str(self.article_id),
             "scores": scores,
             "classification": self.classification,
             "riskFactors": self.risk_factors or {},
+            "factors": self.risk_factors or {},
+            "notes": self.approval_notes or "",
             "requiresSeniorReview": self.requires_senior_review,
             "safeModeBlocked": self.safe_mode_blocked,
             "safeModeViolations": self.safe_mode_violations or [],

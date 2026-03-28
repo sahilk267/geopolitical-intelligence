@@ -3,10 +3,11 @@
 // Dashboard Shell with Sidebar Navigation
 // ============================================
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { Login } from './Login';
 import { Dashboard } from '@/sections/Dashboard';
 import { ContentWorkflow } from '@/sections/ContentWorkflow';
 import { ContentFactory } from '@/sections/ContentFactory';
@@ -24,11 +25,32 @@ import AnalyticsDashboard from '@/sections/AnalyticsDashboard';
 import { NewContentDialog } from './NewContentDialog';
 
 export function Layout() {
-  const { activeTab, sidebarOpen, fetchAllData } = useAppStore();
+  const { activeTab, sidebarOpen, currentUser, fetchAllData, fetchCurrentUser } = useAppStore();
+  const [authLoaded, setAuthLoaded] = useState(false);
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    fetchCurrentUser().finally(() => setAuthLoaded(true));
+  }, [fetchCurrentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchAllData();
+    }
+  }, [currentUser, fetchAllData]);
+
+  if (!authLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-100">
+        <div className="animate-pulse rounded-2xl border border-slate-700 bg-slate-900/95 px-10 py-8 text-center text-lg">
+          Initializing session...
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Login />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {

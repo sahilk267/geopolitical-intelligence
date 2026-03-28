@@ -1,5 +1,7 @@
 ## Geopolitical Intelligence Platform TODO List
 
+Note: this document serves as an audit backlog and may contain broader platform review items. The current implementation status is maintained in `IMPLEMENTATION_PLAN.md`.
+
 The following breakdown captures every missing, conflicting, or incomplete piece identified during the complete audit. It is split into four execution phases so work can be monitored and verified easily.
 
 ### Phase 1 – **Schema & API Alignment**

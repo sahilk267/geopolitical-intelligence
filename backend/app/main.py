@@ -40,36 +40,31 @@ async def lifespan(app: FastAPI):
         # Load API keys from database into in-memory settings
         result = await db.execute(select(PlatformSetting).where(PlatformSetting.category == "security"))
         for setting in result.scalars().all():
-            if setting.key == "gemini_api_key":
-                app_settings.GEMINI_API_KEY = setting.value
-                try:
-                    import google.generativeai as genai
-                    genai.configure(api_key=setting.value)
-                    from app.services.ai_service import ai_service
-                    ai_service.model = genai.GenerativeModel(app_settings.LLM_MODEL)
-                except Exception as e:
-                    logger.error(f"Failed to configure Gemini generated model on startup: {e}")
-            elif setting.key == "llm_model":
-                app_settings.LLM_MODEL = setting.value
-                # If Gemini is provider, re-init model
-                if app_settings.AI_PROVIDER == "gemini":
-                    try:
-                        import google.generativeai as genai
-                        from app.services.ai_service import ai_service
-                        ai_service.model = genai.GenerativeModel(setting.value)
-                    except: pass
-            elif setting.key == "ai_provider":
+            if setting.key == "ai_provider":
                 app_settings.AI_PROVIDER = setting.value
             elif setting.key == "ollama_base_url":
                 app_settings.OLLAMA_BASE_URL = setting.value
             elif setting.key == "ollama_model":
                 app_settings.OLLAMA_MODEL = setting.value
+            elif setting.key == "gemini_api_key":
+                app_settings.GEMINI_API_KEY = setting.value
+            elif setting.key == "llm_model":
+                app_settings.LLM_MODEL = setting.value
             elif setting.key == "elevenlabs_api_key":
                 app_settings.ELEVENLABS_API_KEY = setting.value
             elif setting.key == "did_api_key":
                 app_settings.DID_API_KEY = setting.value
             elif setting.key == "heygen_api_key":
                 app_settings.HEYGEN_API_KEY = setting.value
+
+        if app_settings.AI_PROVIDER == "gemini" and app_settings.GEMINI_API_KEY:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=app_settings.GEMINI_API_KEY)
+                from app.services.ai_service import ai_service
+                ai_service.model = genai.GenerativeModel(app_settings.LLM_MODEL)
+            except Exception as e:
+                logger.error(f"Failed to configure Gemini generated model on startup: {e}")
                 
         result = await db.execute(select(User).limit(1))
         if not result.scalar_one_or_none():

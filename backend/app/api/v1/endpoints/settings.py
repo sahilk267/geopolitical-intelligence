@@ -31,7 +31,7 @@ DEFAULT_SETTINGS = {
     "default_video_resolution": {"value": "1920x1080", "category": "video", "description": "Default video resolution"},
     "short_clip_duration": {"value": "45", "category": "video", "description": "Default short clip duration in seconds"},
     "auto_fetch_interval": {"value": "30", "category": "general", "description": "Auto-fetch interval in minutes"},
-    "ai_provider": {"value": "gemini", "category": "ai", "description": "AI provider: gemini or ollama"},
+    "ai_provider": {"value": "ollama", "category": "ai", "description": "AI provider: gemini or ollama"},
     "gemini_model": {"value": "gemini-1.5-pro", "category": "ai", "description": "Gemini model to use"},
     "ollama_base_url": {"value": "http://host.docker.internal:11434", "category": "ai", "description": "Ollama API Base URL"},
     "ollama_model": {"value": "llama3.2", "category": "ai", "description": "Ollama model name"},
@@ -109,6 +109,11 @@ async def update_settings(
         # Dynamically update in-memory config for AI variables
         if key == "ai_provider":
             app_settings.AI_PROVIDER = value
+            from app.services.ai_service import ai_service
+            if value == "gemini":
+                ai_service._init_provider()
+            else:
+                ai_service.model = None
         elif key == "ollama_base_url":
             app_settings.OLLAMA_BASE_URL = value
         elif key == "ollama_model":

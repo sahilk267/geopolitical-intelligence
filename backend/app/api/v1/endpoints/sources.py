@@ -90,6 +90,7 @@ async def create_source(
 
 
 @router.put("/{source_id}")
+@router.patch("/{source_id}")
 async def update_source(
     source_id: UUID,
     name: Optional[str] = None,
@@ -106,13 +107,13 @@ async def update_source(
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
     
-    if name:
+    if name is not None:
         source.name = name
-    if url:
+    if url is not None:
         source.url = url
     if is_enabled is not None:
         source.is_enabled = is_enabled
-    if fetch_interval_minutes:
+    if fetch_interval_minutes is not None:
         source.fetch_interval_minutes = fetch_interval_minutes
     
     await db.commit()
@@ -153,18 +154,31 @@ async def test_source(
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
     
-    # Simulate test (in production, this would actually fetch)
-    import asyncio
-    import random
+    import httpx
+    from datetime import timedelta
     
-    await asyncio.sleep(1 + random.random())
+    response_time_ms = 0
+    items_found = 0
+    success = False
+    error_message = None
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            response = await client.get(source.url)
+            response_time_ms = int(response.elapsed.total_seconds() * 1000)
+            success = response.status_code >= 200 and response.status_code < 400
+            if success:
+                items_found = 1
+            else:
+                error_message = f"Unexpected status code: {response.status_code}"
+    except Exception as exc:
+        success = False
+        error_message = str(exc)
+        response_time_ms = 0
     
-    success = random.random() > 0.3
-    
-    # Update source stats
     source.last_fetch_status = "success" if success else "error"
     if not success:
-        source.last_fetch_error = "Connection timeout or invalid response"
+        source.last_fetch_error = error_message or "Connection timeout or invalid response"
     source.fetch_count += 1
     if success:
         source.success_count += 1
@@ -176,8 +190,9 @@ async def test_source(
     return {
         "success": success,
         "source": source.to_dict(),
-        "response_time_ms": int(random.random() * 2000),
-        "items_found": int(random.random() * 50) if success else 0,
+        "response_time_ms": response_time_ms,
+        "items_found": items_found,
+        "error_message": error_message,
     }
 
 

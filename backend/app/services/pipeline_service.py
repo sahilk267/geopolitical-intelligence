@@ -97,10 +97,27 @@ class PipelineService:
             pipeline_result["errors"].append(f"Report: {str(e)}")
             return pipeline_result
 
-        # ── Step 3: Generate audio ──
-        narration_text = report.get("executive_summary", "")
-        if isinstance(narration_text, dict):
-            narration_text = " ".join(str(v) for v in narration_text.values())
+        # ── Step 3: Generate Structured Script ──
+        try:
+            script_result = await ai_service.generate_script(
+                article_data={"headline": report.get("headline", category), "content": report.get("executive_summary", "")},
+                layers=["narration", "visuals"],
+                profile=profile_dict
+            )
+            if "error" in script_result:
+                logger.warning(f"Script generation failed, falling back: {script_result['error']}")
+                scenes = [{"voiceover": report.get("executive_summary", ""), "duration_seconds": 30}]
+            else:
+                scenes = script_result.get("scenes", [])
+                pipeline_result["steps"]["report"]["headline"] = script_result.get("title", report.get("headline"))
+        except Exception as e:
+            logger.error(f"Script generation error: {e}")
+            scenes = [{"voiceover": report.get("executive_summary", ""), "duration_seconds": 30}]
+
+        # ── Step 4: Generate audio ──
+        narration_text = " ".join([s.get("voiceover", "") for s in scenes])
+        if not narration_text:
+            narration_text = report.get("executive_summary", "")
 
         try:
             audio_result = await tts_service.generate_audio(
@@ -118,15 +135,19 @@ class PipelineService:
         except Exception as e:
             pipeline_result["errors"].append(f"Audio: {str(e)}")
 
-        # ── Step 4: Generate short clip ──
+        # ── Step 5: Generate short clip ──
         if generate_short and pipeline_result["steps"].get("audio", {}).get("status") == "success":
             image_paths = []
             try:
-                image_prompts = await ai_service.generate_image_prompts(narration_text)
-                for i, p in enumerate(image_prompts[:3]):
-                    img_filename = f"broll_{uuid.uuid4().hex[:8]}.png"
-                    img_path = os.path.join(settings.VIDEO_OUTPUT_DIR, "thumbnails", img_filename)
-                    path = await ai_service.generate_image(p, img_path)
+                # Use scene keywords for more relevant images
+                for scene in scenes[:5]: # Cap at 5 for now
+                    keywords = scene.get("visual_keywords", "geopolitics, news, cinematic")
+                    img_filename = f"scene_{uuid.uuid4().hex[:8]}.png"
+                    img_path = os.path.join(settings.VIDEO_OUTPUT_DIR, "shorts", "assets", img_filename)
+                    # Ensure directory exists
+                    os.makedirs(os.path.dirname(img_path), exist_ok=True)
+                    
+                    path = await ai_service.generate_image(f"Cinematic {keywords}, 8k, realistic news photography", img_path)
                     if path:
                         image_paths.append(path)
             except Exception as e:
@@ -140,11 +161,12 @@ class PipelineService:
 
                 short_result = await video_render_service.render_short_clip(
                     audio_path=audio_result["path"],
-                    headline=report.get("headline", category),
+                    headline=pipeline_result["steps"]["report"].get("headline", category),
                     script_text=narration_text,
                     image_paths=image_paths,
                     music_path=music_path,
-                    profile=profile_dict
+                    profile=profile_dict,
+                    scenes=scenes # PASS SCENES HERE
                 )
                 if "error" in short_result:
                     pipeline_result["errors"].append(f"Short clip: {short_result['error']}")

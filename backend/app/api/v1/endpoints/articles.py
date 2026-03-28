@@ -24,6 +24,7 @@ class ArticleCreate(BaseModel):
     content: str
     summary: Optional[str] = None
     category: Optional[str] = None
+    topic: Optional[str] = None
     region: Optional[str] = None
     topics: Optional[List[str]] = None
     tags: Optional[List[str]] = None
@@ -43,7 +44,7 @@ async def create_article(
         headline=article_in.headline,
         content=article_in.content,
         summary=article_in.summary or article_in.content[:200] + "...",
-        category=article_in.category or "General",
+        category=article_in.category or article_in.topic or "General",
         region=article_in.region or "Global",
         topics=article_in.topics or [],
         tags=article_in.tags or [],
@@ -61,7 +62,10 @@ async def create_article(
         "headline": db_article.headline,
         "summary": db_article.summary,
         "category": db_article.category,
+        "topic": db_article.category,
         "region": db_article.region,
+        "topics": db_article.topics,
+        "tags": db_article.tags,
         "status": db_article.status.value,
         "priority": db_article.priority,
         "createdAt": db_article.created_at.isoformat() if db_article.created_at else None
@@ -249,6 +253,7 @@ async def generate_from_url(
         "headline": headline,
         "content": content,
         "summary": summary,
+        "category": request.topic or "Strategic Analysis",
         "topic": request.topic or "Strategic Analysis",
         "region": request.region or "Global"
     }

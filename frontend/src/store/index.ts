@@ -127,6 +127,9 @@ interface AppState {
   // User Actions
   setCurrentUser: (user: User | null) => void;
   addUser: (user: User) => void;
+  fetchCurrentUser: () => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
 
   updateSettings: (settings: Partial<SystemSettings>) => void;
   setActiveTab: (tab: string) => void;
@@ -208,6 +211,10 @@ const mapArticleToContentItem = (article: any): ContentItem => ({
 });
 
 const normalizeRiskAssessment = (risk: any): RiskAssessment => {
+  const contentId =
+    risk.contentId || risk.articleId || risk.article_id || risk.content_id || '';
+  const notes = risk.notes || risk.approvalNotes || risk.approval_notes || '';
+
   const scores = risk.scores || {
     legalRisk: risk.legal_risk ?? 0,
     defamationRisk: risk.defamation_risk ?? 0,
@@ -216,24 +223,27 @@ const normalizeRiskAssessment = (risk: any): RiskAssessment => {
     overallScore: risk.overall_score ?? risk.overallScore ?? 0,
   };
 
-  const factors: RiskFactors = risk.factors || risk.riskFactors || risk.risk_factors || {
-    namedIndividual: false,
-    criminalAllegation: false,
-    singleAnonymousSource: false,
-    electionPeriod: false,
-    warTopic: false,
-    religiousFraming: false,
-    ethnicTension: false,
-    activeConflict: false,
-    terrorismDesignation: false,
-    israelMentioned: false,
-    iranMentioned: false,
-    palestineMentioned: false,
-    usMilitaryInvolved: false,
-  };
+  const factors: RiskFactors =
+    risk.factors || risk.riskFactors || risk.risk_factors || {
+      namedIndividual: false,
+      criminalAllegation: false,
+      singleAnonymousSource: false,
+      electionPeriod: false,
+      warTopic: false,
+      religiousFraming: false,
+      ethnicTension: false,
+      activeConflict: false,
+      terrorismDesignation: false,
+      israelMentioned: false,
+      iranMentioned: false,
+      palestineMentioned: false,
+      usMilitaryInvolved: false,
+    };
 
   return {
     ...risk,
+    contentId,
+    notes,
     scores,
     factors,
     riskFactors: risk.riskFactors || factors,
@@ -415,6 +425,52 @@ export const useAppStore = create<AppState>()(
           audienceFeedback: [feedback, ...state.audienceFeedback],
         }));
       },
+      fetchCurrentUser: async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          set({ currentUser: null });
+          return;
+        }
+
+        try {
+          const user = (await api.getCurrentUser()) as any;
+          set({ currentUser: {
+            id: user.id,
+            name: user.full_name || user.username || user.email,
+            email: user.email,
+            role: user.role,
+            permissions: [],
+            createdAt: user.last_login || new Date().toISOString(),
+          } });
+        } catch (error) {
+          console.warn('Failed to fetch current user:', error);
+          localStorage.removeItem('token');
+          set({ currentUser: null });
+        }
+      },
+      login: async (username: string, password: string) => {
+        try {
+          const auth = await api.login(username, password) as any;
+          localStorage.setItem('token', auth.access_token);
+          const user = (auth.user || await api.getCurrentUser()) as any;
+          set({ currentUser: {
+            id: user.id,
+            name: user.full_name || user.username || user.email,
+            email: user.email,
+            role: user.role,
+            permissions: [],
+            createdAt: user.last_login || new Date().toISOString(),
+          } });
+          await get().fetchAllData();
+        } catch (error) {
+          console.error('Login failed:', error);
+          throw error;
+        }
+      },
+      logout: () => {
+        localStorage.removeItem('token');
+        set({ currentUser: null });
+      },
 
       // Data Source Actions
       addDataSource: (source: DataSource) => {
@@ -511,14 +567,14 @@ export const useAppStore = create<AppState>()(
         set({ isFetching: true });
         try {
           if (!localStorage.getItem('token')) {
-            console.log('No token found, attempting auto-login...');
-            await api.login();
+            set({ isFetching: false });
+            return;
           }
 
           // Fetch all data, but handle individual failures gracefully
           const fetchResults = await Promise.allSettled([
             api.getDataSources(),
-            api.getContents(),
+            api.getArticles(),
             api.getDashboardStats(),
             api.getCurrentERI(),
             api.getERIAssessments(),
@@ -606,7 +662,7 @@ export const useAppStore = create<AppState>()(
 
       fetchContents: async () => {
         try {
-          const contents = await api.getContents() as any[];
+          const contents = await api.getArticles() as any[];
           set({ contents: contents.map(mapArticleToContentItem) });
         } catch (error) {
           console.error('Failed to fetch contents:', error);

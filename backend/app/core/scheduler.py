@@ -10,6 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+try:
+    from croniter import croniter
+    _croniter_available = True
+except ImportError:
+    _croniter_available = False
+
 from app.core.config import settings
 from app.db.base import AsyncSessionLocal
 from app.models.source import Source
@@ -19,7 +25,6 @@ from app.models.user import User
 from app.models.brief import WeeklyBrief
 from app.models.eri import ERIAssessment
 from app.services.risk_service import risk_service
-from app.api.v1.endpoints.sources import fetch_from_source
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +63,44 @@ async def poll_active_sources(db: AsyncSession):
             except Exception as e:
                 logger.error(f"Failed to legacy auto-poll source {source.name}: {e}")
 
+def _compute_next_run(schedule, reference: datetime) -> Optional[datetime]:
+    if schedule.interval_minutes:
+        return reference + timedelta(minutes=schedule.interval_minutes)
+    if schedule.cron_expression:
+        if not _croniter_available:
+            logger.warning(
+                f"Cron expression support requires croniter for schedule {schedule.name}."
+            )
+            return None
+        try:
+            return croniter(schedule.cron_expression, reference).get_next(datetime)
+        except Exception as e:
+            logger.warning(
+                f"Invalid cron_expression for schedule {schedule.name}: {e}"
+            )
+            return None
+    return None
+
+
+def _should_run(schedule, now: datetime) -> bool:
+    if not schedule.last_run_at:
+        return True
+    if schedule.interval_minutes:
+        return (now - schedule.last_run_at) >= timedelta(minutes=schedule.interval_minutes)
+    if schedule.cron_expression:
+        if not _croniter_available:
+            return False
+        try:
+            next_run = croniter(schedule.cron_expression, schedule.last_run_at).get_next(datetime)
+            return now >= next_run
+        except Exception as e:
+            logger.warning(
+                f"Invalid cron_expression for schedule {schedule.name}: {e}"
+            )
+            return False
+    return False
+
+
 async def process_automation_schedules(db: AsyncSession):
     """Dynamically process automation schedules based on database configuration."""
     from app.models.automation import AutomationSchedule, AutomationTaskType
@@ -71,49 +114,50 @@ async def process_automation_schedules(db: AsyncSession):
     now = datetime.utcnow()
     
     for schedule in schedules:
-        should_run = False
-        if not schedule.last_run_at:
-            should_run = True
-        elif schedule.interval_minutes:
-            time_since_last = now - schedule.last_run_at
-            if time_since_last >= timedelta(minutes=schedule.interval_minutes):
-                should_run = True
-        
-        if should_run:
-            logger.info(f"Executing automation schedule: {schedule.name} (Type: {schedule.task_type})")
-            try:
-                if schedule.task_type == AutomationTaskType.CONTENT_FETCH:
-                    category = (schedule.task_params or {}).get("category")
-                    if category:
-                        await source_service.fetch_by_category(category, db)
-                    else:
-                        await source_service.fetch_all_enabled(db)
-                
-                elif schedule.task_type == AutomationTaskType.RISK_ASSESSMENT:
-                    logger.info(f"Risk assessment task triggered: {schedule.name}")
-                    await _run_risk_assessment_automation(db)
+        if not _should_run(schedule, now):
+            continue
 
-                elif schedule.task_type == AutomationTaskType.WEEKLY_BRIEF:
-                    logger.info(f"Weekly brief task triggered: {schedule.name}")
-                    await _run_weekly_brief_automation(db)
-                
-                elif schedule.task_type == AutomationTaskType.FETCH_SOURCES:
-                    await source_service.fetch_all_enabled(db)
-                
-                else:
-                    logger.warning(f"Unknown automation task type: {schedule.task_type}")
-                
-                schedule.last_run_at = now
-                schedule.run_count += 1
-                schedule.success_count += 1
+        logger.info(f"Executing automation schedule: {schedule.name} (Type: {schedule.task_type})")
+        schedule.run_count += 1
+        schedule.last_run_at = now
+        schedule.next_run_at = _compute_next_run(schedule, now)
+
+        try:
+            await _execute_automation_task(schedule, db, source_service)
+            schedule.success_count += 1
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to execute schedule {schedule.name}: {e}")
+            schedule.failure_count += 1
+            try:
                 await db.commit()
-            except Exception as e:
-                logger.error(f"Failed to execute schedule {schedule.name}: {e}")
-                schedule.failure_count += 1
-                try:
-                    await db.commit()
-                except Exception:
-                    await db.rollback()
+            except Exception:
+                await db.rollback()
+
+
+async def _execute_automation_task(schedule, db: AsyncSession, source_service):
+    from app.models.automation import AutomationTaskType
+
+    if schedule.task_type == AutomationTaskType.CONTENT_FETCH:
+        category = (schedule.task_params or {}).get("category")
+        if category:
+            await source_service.fetch_by_category(category, db)
+        else:
+            await source_service.fetch_all_enabled(db)
+
+    elif schedule.task_type == AutomationTaskType.RISK_ASSESSMENT:
+        logger.info(f"Risk assessment task triggered: {schedule.name}")
+        await _run_risk_assessment_automation(db)
+
+    elif schedule.task_type == AutomationTaskType.WEEKLY_BRIEF:
+        logger.info(f"Weekly brief task triggered: {schedule.name}")
+        await _run_weekly_brief_automation(db)
+
+    elif schedule.task_type == AutomationTaskType.FETCH_SOURCES:
+        await source_service.fetch_all_enabled(db)
+
+    else:
+        raise ValueError(f"Unknown automation task type: {schedule.task_type}")
 
 
 async def process_campaign_schedules(db: AsyncSession):

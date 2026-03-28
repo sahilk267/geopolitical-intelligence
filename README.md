@@ -2,6 +2,11 @@
 
 An academic, modular geopolitical intelligence platform for structured news analysis, risk governance, and high-quality AI content production.
 
+## 📌 Project Status
+- Core platform integration and auth workflows are implemented.
+- Dashboard query optimizations and runbook documentation are complete.
+- `IMPLEMENTATION_PLAN.md` tracks finished work and remaining checkpoints.
+
 ## 🎯 System Overview
 
 This platform is a comprehensive end-to-end intelligence suite that automates the transition from raw data to actionable insights and professional media content.
@@ -163,7 +168,11 @@ The Phase 12 autonomous engine enables a hands-free intelligence network:
 - **Visuals**: SD.Next (Stable Diffusion), DirectML (Windows GPU Acceleration).
 - **Cognition**: ChromaDB (Local Vector Store).
 
-## 📖 Detailed Setup Guide
+## � Runbook
+
+For setup, migration, and troubleshooting steps, see `RUNBOOK.md`.
+
+## �📖 Detailed Setup Guide
 
 ### 🐳 Docker (Recommended)
 ```bash
