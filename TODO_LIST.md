@@ -2,6 +2,14 @@
 
 Note: this document serves as an audit backlog and may contain broader platform review items. The current implementation status is maintained in `IMPLEMENTATION_PLAN.md`.
 
+## Current Readiness
+
+- [x] Core implementation phase finished and verified in `IMPLEMENTATION_PLAN.md`
+- [ ] Run end-to-end frontend/backend validation flows
+- [ ] Confirm scheduler and automation jobs update success/failure metrics
+- [ ] Ensure `RUNBOOK.md` and `README.md` accurately reflect deployment steps
+- [ ] Trim or archive stale audit items once validated
+
 The following breakdown captures every missing, conflicting, or incomplete piece identified during the complete audit. It is split into four execution phases so work can be monitored and verified easily.
 
 ### Phase 1 – **Schema & API Alignment**

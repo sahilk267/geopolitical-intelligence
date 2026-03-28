@@ -5,6 +5,7 @@ An academic, modular geopolitical intelligence platform for structured news anal
 ## 📌 Project Status
 - Core platform integration and auth workflows are implemented.
 - Dashboard query optimizations and runbook documentation are complete.
+- Current status: implementation phase is complete; next is validation, cleanup, and deployment readiness.
 - `IMPLEMENTATION_PLAN.md` tracks finished work and remaining checkpoints.
 
 ## 🎯 System Overview
