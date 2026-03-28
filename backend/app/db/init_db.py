@@ -3,6 +3,7 @@ Database Initialization
 """
 import logging
 import secrets
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 
@@ -39,7 +40,7 @@ async def init_db():
 
 async def create_initial_data(db: AsyncSession):
     """Create initial seed data."""
-    # Create default roles
+    # Create default roles if they do not already exist
     roles = [
         {"name": "admin", "description": "Full system access"},
         {"name": "editor_in_chief", "description": "Can approve all content"},
@@ -47,32 +48,37 @@ async def create_initial_data(db: AsyncSession):
         {"name": "junior_editor", "description": "Can approve low risk content"},
         {"name": "viewer", "description": "Read-only access"},
     ]
-    
+
     for role_data in roles:
-        role = Role(**role_data)
-        db.add(role)
-    
+        result = await db.execute(select(Role).where(Role.name == role_data["name"]))
+        if result.scalar_one_or_none() is None:
+            db.add(Role(**role_data))
+
     await db.commit()
-    logger.info("Default roles created")
-    
+    logger.info("Default roles verified/created")
+
     admin_email = settings.DEFAULT_ADMIN_EMAIL
     admin_username = settings.DEFAULT_ADMIN_USERNAME or "admin"
     admin_password = settings.DEFAULT_ADMIN_PASSWORD
     admin_full_name = settings.DEFAULT_ADMIN_FULL_NAME or "System Administrator"
 
     if admin_email and admin_password:
-        admin_user = User(
-            email=admin_email,
-            username=admin_username,
-            hashed_password=hash_password(admin_password),
-            full_name=admin_full_name,
-            primary_role=UserRole.ADMIN,
-            is_superuser=True,
-            is_active=True,
-        )
-        db.add(admin_user)
-        await db.commit()
-        logger.info("Default admin user created")
+        result = await db.execute(select(User).where(User.email == admin_email))
+        if result.scalar_one_or_none() is None:
+            admin_user = User(
+                email=admin_email,
+                username=admin_username,
+                hashed_password=hash_password(admin_password),
+                full_name=admin_full_name,
+                primary_role=UserRole.ADMIN,
+                is_superuser=True,
+                is_active=True,
+            )
+            db.add(admin_user)
+            await db.commit()
+            logger.info("Default admin user created")
+        else:
+            logger.info("Default admin user already exists")
     else:
         logger.warning(
             "No default admin user created because DEFAULT_ADMIN_EMAIL or DEFAULT_ADMIN_PASSWORD is not set. "

@@ -13,6 +13,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    libffi-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
+    pkg-config \
     curl \
     ffmpeg \
     fonts-dejavu-core \
@@ -22,9 +27,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create output directories for media
 RUN mkdir -p /app/output/videos/audio /app/output/videos/shorts /app/output/videos/presenter /app/output/videos/avatars /app/output/videos/thumbnails /app/assets
 
-# Install Python dependencies
+# Upgrade pip and install Python dependencies
+ENV PIP_DEFAULT_TIMEOUT=100
+ENV PIP_RETRIES=10
+RUN python -m pip install --upgrade pip setuptools wheel
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 
 # Copy project files
 COPY . .
